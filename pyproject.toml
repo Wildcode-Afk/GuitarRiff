@@ -1,0 +1,50 @@
+[project]
+name = "guitarriff"
+version = "0.1.0"
+description = "GuitarRiff — application gratuite et open source pour transformer un lien YouTube ou un fichier audio en tablatures, partitions et pistes musicales éditables."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+    "pydantic>=2.7,<3.0",
+    "pydantic-settings>=2.4,<3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2,<9.0",
+    "pytest-cov>=5.0,<6.0",
+    "httpx>=0.27,<1.0",
+    "ruff>=0.6,<1.0",
+    "mypy>=1.11,<2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/guitarriff"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: exécutions lentes ou nécessitant un vrai fichier audio (jamais en CI par défaut)",
+    "integration: tests d'intégration (réseau, modèles réels, etc.)",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["backend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "backend"
+packages = ["guitarriff"]
+ignore_missing_imports = true

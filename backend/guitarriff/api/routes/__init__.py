@@ -1,0 +1,1 @@
+"""Routes FastAPI de GuitarRiff."""

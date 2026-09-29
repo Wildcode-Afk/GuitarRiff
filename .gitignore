@@ -1,0 +1,37 @@
+# Environnement / secrets
+.env
+.venv/
+venv*/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Données de travail (jobs, audio, résultats générés)
+data/
+*.wav
+*.mp3
+*.mid
+*.midi
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Éditeurs / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# uv
+uv.lock.tmp
