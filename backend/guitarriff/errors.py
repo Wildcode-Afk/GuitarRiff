@@ -47,6 +47,32 @@ class ValidationAppError(AppError):
     error_code = "validation_error"
 
 
+class UnsupportedFileTypeError(AppError):
+    """Le fichier envoyé n'est reconnu comme aucun des formats audio
+    supportés (extension ET contenu binaire vérifiés — voir
+    `acquisition/formats.py`)."""
+
+    status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+    error_code = "unsupported_file_type"
+
+
+class FileTooLargeError(AppError):
+    status_code = status.HTTP_413_CONTENT_TOO_LARGE
+    error_code = "file_too_large"
+
+
+class InvalidFileIdError(AppError):
+    """Identifiant de fichier syntaxiquement invalide (pas un UUID).
+
+    Distinct de `NotFoundError` : un identifiant malformé est rejeté avant
+    même de toucher le système de fichiers (voir `acquisition/storage.py`),
+    ce qui est la protection principale contre les chemins arbitraires.
+    """
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "invalid_file_id"
+
+
 def _envelope(code: str, message: str, details: dict[str, Any] | None = None) -> dict:
     return {"error": {"code": code, "message": message, "details": details or {}}}
 

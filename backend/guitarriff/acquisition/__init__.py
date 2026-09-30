@@ -1,5 +1,8 @@
-"""Acquisition audio (import de fichier, et à terme yt-dlp — voir docs/TECHNICAL_DECISIONS.md Q1).
+"""Acquisition audio.
 
-Vide à ce stade (Étape 2 — fondations uniquement). Aucune logique d'acquisition
-n'est implémentée ici pour l'instant.
+`formats.py` : détection sécurisée du format réel d'un fichier (magic bytes).
+`storage.py` : stockage sur disque, identifiants internes, suppression contrôlée.
+
+L'acquisition depuis une URL YouTube (`yt-dlp`, décision Q1 — voir
+docs/TECHNICAL_DECISIONS.md) n'est pas encore implémentée à ce stade.
 """

@@ -1,11 +1,11 @@
 """Point d'entrée de l'API FastAPI.
 
-À ce stade (Étape 3 — socle API), l'application expose : la vérification de
-démarrage (`/health`), la version (`/version`), une gestion d'erreurs
-cohérente et la configuration CORS pour le frontend. Aucune route de
-téléchargement YouTube ni de transcription n'existe encore : elles seront
-ajoutées derrière l'interface `Transcriber` décrite dans docs/ARCHITECTURE.md,
-une fois cette étape validée.
+À ce stade (Étape 4), l'application expose : la vérification de démarrage
+(`/health`), la version (`/version`), l'import/consultation/suppression de
+fichiers audio locaux (`/audio-files`), une gestion d'erreurs cohérente et la
+configuration CORS pour le frontend. Aucune route de téléchargement YouTube ni
+de transcription n'existe encore : elles seront ajoutées derrière l'interface
+`Transcriber` décrite dans docs/ARCHITECTURE.md, une fois cette étape validée.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from guitarriff.api.routes.audio_files import router as audio_files_router
 from guitarriff.api.routes.health import router as health_router
 from guitarriff.api.routes.version import router as version_router
 from guitarriff.config import Settings, get_settings
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(version_router)
+    app.include_router(audio_files_router)
 
     return app
 

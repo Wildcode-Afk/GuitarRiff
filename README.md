@@ -48,6 +48,14 @@ Vérifier que l'application répond :
 curl http://127.0.0.1:8000/health
 ```
 
+Importer un fichier audio local (WAV, FLAC, OGG, M4A ou MP3) :
+
+```bash
+curl -X POST http://127.0.0.1:8000/audio-files -F "file=@/chemin/vers/mon_fichier.wav"
+```
+
+Voir `docs/API.md` pour le détail des routes et des erreurs.
+
 ## Tests
 
 ```bash

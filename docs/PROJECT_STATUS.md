@@ -1,6 +1,45 @@
 # GuitarRiff — État du projet
 
-## Étape 3 — API et serveur minimal (terminée le 29/09/2026)
+## Étape 4 — Gestion des fichiers audio locaux (terminée le 30/09/2026)
+
+> Statut : **import de fichiers audio locaux fonctionnel et sécurisé. Toujours aucune transcription.**
+
+### Ce qui a été ajouté (par rapport à l'Étape 3)
+
+| Élément | État |
+|---|---|
+| `acquisition/formats.py` | Détection du format réel par signature binaire (magic bytes) : WAV, FLAC, OGG, M4A, MP3 — jamais par extension ou `Content-Type` déclaré |
+| `acquisition/storage.py` | Stockage sécurisé : identifiant interne `uuid4` généré côté serveur (seul composant de chemin), nom d'origine assaini conservé en métadonnée d'affichage uniquement, suppression contrôlée (`delete`), utilitaire `purge_all()` |
+| `POST /audio-files` | Upload multipart, lecture par blocs de 1 Mo avec arrêt dès dépassement de `MAX_UPLOAD_SIZE_MB` (défaut 100 Mo) |
+| `GET /audio-files/{id}` | Métadonnées du fichier importé |
+| `DELETE /audio-files/{id}` | Suppression du fichier et de ses métadonnées |
+| Erreurs dédiées (`errors.py`) | `UnsupportedFileTypeError` (415), `FileTooLargeError` (413), `InvalidFileIdError` (400) — toutes via l'enveloppe JSON cohérente de l'Étape 3 |
+| `docs/API.md` | Section complète sur `/audio-files` et les garanties de sécurité de l'import |
+| Tests | 38 nouveaux tests (détection de format, stockage, API) — **tous passent**, backend à **55 tests au total** |
+
+### Vérifications de sécurité effectuées (réelles, pas supposées)
+
+- Upload avec un nom de fichier `../../../etc/passwd.wav` : le fichier est stocké normalement sous son UUID, **aucun répertoire n'est créé en dehors de `data/uploads/`** (vérifié par test, y compris via l'API complète).
+- Identifiants malformés (`..`, `/etc/passwd`, `not-a-uuid`, chaîne vide, forme encodée `%2e%2e%2f...`) : tous rejetés **avant** toute opération sur le système de fichiers (erreur `400 invalid_file_id`), jamais de 500.
+- Contenu ne correspondant à aucun format audio (texte brut, en-tête d'exécutable ELF) : rejeté (`415`), y compris quand l'extension déclarée est `.wav`.
+- Extension incohérente avec le contenu réel (ex. contenu WAV valide renommé `.mp3`) : rejeté (`415`).
+- Test de bout en bout réel (pas seulement `TestClient`) : serveur `uvicorn` lancé, upload d'un vrai fichier WAV généré par FFmpeg via `curl`, cycle complet upload → consultation → suppression → 404 confirmé.
+
+### Résultats d'exécution réels
+
+```
+Backend : uv run pytest        → 55 passed
+Backend : uv run ruff check .  → All checks passed!
+Backend : uv run mypy backend/guitarriff → Success: no issues found in 21 source files
+```
+
+### Écarts et points d'attention
+
+- L'avertissement `httpx`/`TestClient` déjà signalé persiste, toujours sans impact.
+- `purge_all()` existe mais n'est pas exposé via l'API ni planifié automatiquement — nettoyage manuel pour l'instant, à brancher sur une tâche planifiée quand la file de jobs (D6) sera implémentée.
+- Toujours aucune transcription, aucun accès YouTube : conforme à la consigne de cette étape.
+
+## Historique — Étape 3 : API et serveur minimal (29/09/2026)
 
 > Statut : **socle API robuste en place (erreurs, config, CORS, doc). Toujours aucune fonctionnalité YouTube/transcription.**
 

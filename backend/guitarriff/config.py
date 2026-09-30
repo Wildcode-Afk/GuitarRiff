@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     # (squelette uniquement — aucune fonctionnalité audio à cette étape).
     ytdlp_enabled: bool = True
 
+    # Taille maximale acceptée pour un fichier audio importé (Étape 4).
+    # 100 Mo par défaut : large pour un fichier audio compressé, mais borné
+    # pour éviter qu'un import ne sature le disque/la mémoire sur une
+    # machine modeste (voir docs/TECHNICAL_DECISIONS.md, D6).
+    max_upload_size_mb: int = Field(default=100, ge=1)
+
     @field_validator("data_dir")
     @classmethod
     def _resolve_data_dir(cls, value: Path) -> Path:
@@ -73,6 +79,20 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def max_upload_size_bytes(self) -> int:
+        return self.max_upload_size_mb * 1024 * 1024
+
+    @property
+    def uploads_dir(self) -> Path:
+        """Répertoire de stockage des fichiers audio importés.
+
+        Toujours dérivé de `data_dir`, jamais construit à partir d'une
+        entrée utilisateur (voir `acquisition/storage.py`).
+        """
+
+        return self.data_dir / "uploads"
 
 
 def get_settings() -> Settings:

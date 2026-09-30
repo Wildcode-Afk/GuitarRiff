@@ -60,6 +60,66 @@ Réponse (`200`) :
 { "name": "guitarriff", "version": "0.1.0" }
 ```
 
+### `POST /audio-files`
+
+Importe un fichier audio local (multipart/form-data, champ `file`). Ne
+déclenche aucune transcription — stocke uniquement le fichier et renvoie ses
+métadonnées.
+
+**Formats acceptés** (vérifiés sur le contenu binaire réel du fichier, pas sur
+l'extension ni le `Content-Type` déclaré par le client — voir « Sécurité »
+ci-dessous) : WAV, FLAC, OGG (Vorbis/Opus), M4A/AAC, MP3.
+
+**Taille maximale** : `MAX_UPLOAD_SIZE_MB` (100 Mo par défaut, voir `.env.example`).
+
+Réponse (`201`) :
+
+```json
+{
+  "file_id": "684754d3-cd53-44d7-8cfd-c3ac4fcfbb5b",
+  "original_filename": "ma_chanson.wav",
+  "format": "wav",
+  "content_type": "audio/wav",
+  "size_bytes": 88278,
+  "uploaded_at": "2026-09-30T18:07:19.895120+00:00",
+  "status": "stored"
+}
+```
+
+Erreurs possibles : `415` (`unsupported_file_type` — format non reconnu ou
+extension incohérente avec le contenu), `413` (`file_too_large`).
+
+### `GET /audio-files/{file_id}`
+
+Renvoie les métadonnées d'un fichier déjà importé (même forme que la réponse
+de `POST /audio-files`). `404` (`not_found`) si l'identifiant est inconnu,
+`400` (`invalid_file_id`) s'il n'a pas la forme d'un UUID.
+
+### `DELETE /audio-files/{file_id}`
+
+Supprime le fichier et ses métadonnées. `204` en cas de succès, `404`
+(`not_found`) si l'identifiant est inconnu.
+
+### Sécurité de l'import de fichiers
+
+- **L'extension déclarée et le `Content-Type` du client ne sont jamais
+  fiables** : le format est déterminé en lisant la signature binaire
+  (« magic bytes ») du fichier lui-même (voir
+  `backend/guitarriff/acquisition/formats.py`). Une extension incohérente
+  avec le contenu détecté est rejetée.
+- **Aucune traversée de répertoire possible** : chaque fichier reçoit un
+  identifiant interne (`uuid4`) généré côté serveur, qui est le seul élément
+  utilisé pour construire le chemin de stockage. Le nom de fichier d'origine
+  fourni par le client n'est conservé que comme métadonnée d'affichage
+  (assaini), jamais comme composant de chemin — voir
+  `backend/guitarriff/acquisition/storage.py`.
+- **Taille bornée dès la lecture** : le contenu est lu par blocs de 1 Mo ;
+  l'import est interrompu dès que la limite configurée est dépassée, sans
+  attendre d'avoir reçu tout le fichier.
+- Un utilitaire `AudioFileStorage.purge_all()` existe pour vider le
+  répertoire d'upload (nettoyage manuel ou tâche planifiée à ajouter plus
+  tard) — non exposé via l'API à ce stade.
+
 ## Format des erreurs
 
 Toutes les erreurs (validation, route inconnue, méthode non autorisée,
@@ -80,7 +140,10 @@ erreurs métier, erreurs internes) renvoient la même enveloppe JSON :
 | Route inexistante | 404 | `http_404` |
 | Méthode non autorisée | 405 | `http_405` |
 | Paramètre/entrée invalide (schéma Pydantic) | 422 | `validation_error` |
-| Erreur métier (ex. ressource introuvable) | variable (ex. 404) | ex. `not_found` |
+| Ressource introuvable (ex. fichier audio inconnu) | 404 | `not_found` |
+| Identifiant de fichier malformé (pas un UUID) | 400 | `invalid_file_id` |
+| Format de fichier non supporté ou incohérent | 415 | `unsupported_file_type` |
+| Fichier trop volumineux | 413 | `file_too_large` |
 | Erreur interne non prévue | 500 | `internal_error` |
 
 ### Garanties de sécurité
