@@ -1,6 +1,37 @@
 # GuitarRiff — État du projet
 
-## Étape 2 — Fondations du projet (terminée le 29/09/2026)
+## Étape 3 — API et serveur minimal (terminée le 29/09/2026)
+
+> Statut : **socle API robuste en place (erreurs, config, CORS, doc). Toujours aucune fonctionnalité YouTube/transcription.**
+
+### Ce qui a été ajouté (par rapport à l'Étape 2)
+
+| Élément | État |
+|---|---|
+| Gestion d'erreurs centralisée (`errors.py`) | `AppError` + sous-classes (`NotFoundError`, `ValidationAppError`), handlers pour erreurs métier, validation Pydantic (422), routage (404/405) et erreurs internes non prévues (500) — **une seule enveloppe JSON cohérente** pour tous les cas |
+| Sécurité des erreurs | Vérifié par test : aucune trace, aucun chemin système, aucun message d'exception brut ne fuite dans une réponse HTTP ; le détail complet est journalisé côté serveur uniquement |
+| `GET /version` | Nouvelle route, renvoie nom + version du package |
+| `GET /health` | Étendue avec un paramètre `verbose` (validé automatiquement par FastAPI) ajoutant des vérifications (ex. répertoire de données inscriptible) **sans jamais exposer de chemin absolu** |
+| Configuration CORS | `CORS_ORIGINS` ajouté à `Settings` et `.env.example`, middleware CORS branché sur l'API, valeur par défaut alignée sur le port Vite (`http://localhost:5173`) |
+| `docs/API.md` | Nouveau : routes disponibles, format des erreurs, garanties de sécurité, règles pour étendre l'API |
+| Tests | 11 nouveaux tests (config CORS, `/version`, `/health?verbose`, 404/405/422/500, `AppError`) — **tous passent**, backend à **17 tests au total** |
+
+### Résultats d'exécution réels
+
+```
+Backend : uv run pytest        → 17 passed
+Backend : uv run ruff check .  → All checks passed!
+Backend : uv run mypy backend/guitarriff → Success: no issues found in 18 source files
+Frontend : npm run test        → 1 passed (inchangé, non touché à cette étape)
+```
+
+### Écarts et points d'attention
+
+- L'avertissement `StarletteDeprecationWarning` sur `httpx`/`TestClient` (déjà noté à l'Étape 2) persiste — toujours sans impact, toujours non traité (upstream FastAPI/Starlette, pas notre code).
+- Pas de route fonctionnelle au-delà de `/health` et `/version` : conforme à la consigne de ne pas démarrer le téléchargement YouTube ni la transcription à cette étape.
+- Le frontend n'appelle toujours pas l'API (CORS est configuré et prêt, mais pas encore utilisé) — sera pertinent dès qu'une vraie interaction front/back sera développée.
+
+## Historique — Étape 2 : fondations du projet (29/09/2026)
 
 > Statut : **squelette d'application en place, testé et validé. Aucune fonctionnalité de transcription audio.**
 

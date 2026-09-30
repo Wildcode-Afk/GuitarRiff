@@ -46,3 +46,20 @@ def test_data_dir_is_resolved_to_absolute_path(monkeypatch) -> None:
     monkeypatch.setenv("DATA_DIR", "./some/relative/dir")
     settings = Settings(_env_file=None)
     assert settings.data_dir.is_absolute()
+
+
+def test_cors_origins_default() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.cors_origins_list == ["http://localhost:5173"]
+
+
+def test_cors_origins_parsed_from_comma_separated_env(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "CORS_ORIGINS", "http://localhost:5173, http://127.0.0.1:5173,http://example.com"
+    )
+    settings = Settings(_env_file=None)
+    assert settings.cors_origins_list == [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://example.com",
+    ]

@@ -1,9 +1,11 @@
 """Point d'entrée de l'API FastAPI.
 
-À ce stade (Étape 2 — fondations), l'application n'expose que la vérification
-de démarrage (`/health`). Aucune route de transcription/tablature n'existe
-encore : elles seront ajoutées derrière l'interface `Transcriber` décrite dans
-docs/ARCHITECTURE.md, une fois cette étape validée.
+À ce stade (Étape 3 — socle API), l'application expose : la vérification de
+démarrage (`/health`), la version (`/version`), une gestion d'erreurs
+cohérente et la configuration CORS pour le frontend. Aucune route de
+téléchargement YouTube ni de transcription n'existe encore : elles seront
+ajoutées derrière l'interface `Transcriber` décrite dans docs/ARCHITECTURE.md,
+une fois cette étape validée.
 """
 
 from __future__ import annotations
@@ -12,12 +14,23 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from guitarriff.api.routes.health import router as health_router
+from guitarriff.api.routes.version import router as version_router
 from guitarriff.config import Settings, get_settings
+from guitarriff.errors import register_error_handlers
 from guitarriff.logging_config import configure_logging, get_logger
 
 logger = get_logger(__name__)
+
+API_DESCRIPTION = """
+API de GuitarRiff — socle serveur (Étape 3).
+
+Aucune fonctionnalité de téléchargement YouTube ni de transcription audio
+n'est encore exposée à ce stade. Voir `docs/API.md` pour le détail des
+routes disponibles et le format des erreurs.
+""".strip()
 
 
 def _make_lifespan(settings: Settings):
@@ -41,15 +54,23 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="GuitarRiff API",
         version="0.1.0",
-        description=(
-            "API de GuitarRiff — squelette d'application (Étape 2). "
-            "Aucune fonctionnalité de transcription audio à ce stade."
-        ),
+        description=API_DESCRIPTION,
         lifespan=_make_lifespan(settings),
     )
     app.state.settings = settings
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    register_error_handlers(app)
+
     app.include_router(health_router)
+    app.include_router(version_router)
 
     return app
 

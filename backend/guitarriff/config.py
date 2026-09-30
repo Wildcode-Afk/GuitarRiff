@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = Field(default=8000, ge=1, le=65535)
 
+    # Origines autorisées pour les appels du frontend (CORS), en chaîne brute
+    # séparée par des virgules (ex. "http://localhost:5173,http://127.0.0.1:5173").
+    # Stocké en str plutôt qu'en list[str] : pydantic-settings tente de
+    # décoder les champs de type liste comme du JSON depuis l'environnement,
+    # ce qui casserait un simple `CORS_ORIGINS=a,b,c`. Utiliser
+    # `cors_origins_list` pour la valeur exploitable.
+    cors_origins: str = "http://localhost:5173"
+
     data_dir: Path = Path("./data")
 
     # Décision D6 : concurrence prudente par défaut (empreinte mémoire de
@@ -61,6 +69,10 @@ class Settings(BaseSettings):
     @classmethod
     def _resolve_data_dir(cls, value: Path) -> Path:
         return value.expanduser().resolve()
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 def get_settings() -> Settings:
