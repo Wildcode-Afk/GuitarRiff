@@ -1,11 +1,12 @@
 """Point d'entrée de l'API FastAPI.
 
-À ce stade (Étape 5), l'application expose : la vérification de démarrage
-(`/health`), la version (`/version`), l'import/consultation/suppression de
-fichiers audio locaux (`/audio-files`), l'import audio depuis YouTube
-(`/youtube-imports`), une gestion d'erreurs cohérente et la configuration
-CORS pour le frontend. Aucune transcription n'existe encore : elle sera
-ajoutée derrière l'interface `Transcriber` décrite dans
+À ce stade (Étape 6), l'application expose : la vérification de démarrage
+(`/health`, avec vérification de la disponibilité de FFmpeg en mode
+`verbose`), la version (`/version`), l'import/consultation/suppression/
+normalisation de fichiers audio locaux (`/audio-files`), l'import audio
+depuis YouTube (`/youtube-imports`), une gestion d'erreurs cohérente et la
+configuration CORS pour le frontend. Aucune transcription n'existe encore :
+elle sera ajoutée derrière l'interface `Transcriber` décrite dans
 docs/ARCHITECTURE.md, une fois cette étape validée.
 """
 
@@ -28,7 +29,7 @@ from guitarriff.logging_config import configure_logging, get_logger
 logger = get_logger(__name__)
 
 API_DESCRIPTION = """
-API de GuitarRiff — socle serveur (Étape 5).
+API de GuitarRiff — socle serveur (Étape 6).
 
 Aucune fonctionnalité de transcription audio n'est encore exposée à ce
 stade. Voir `docs/API.md` pour le détail des routes disponibles et le

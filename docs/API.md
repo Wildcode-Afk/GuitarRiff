@@ -44,7 +44,8 @@ Avec `?verbose=true`, un champ `checks` est ajouté :
 {
   "...": "...",
   "checks": {
-    "data_dir_writable": true
+    "data_dir_writable": true,
+    "ffmpeg_available": true
   }
 }
 ```
@@ -88,6 +89,57 @@ Réponse (`201`) :
 
 Erreurs possibles : `415` (`unsupported_file_type` — format non reconnu ou
 extension incohérente avec le contenu), `413` (`file_too_large`).
+
+### `POST /audio-files/{file_id}/normalize`
+
+Convertit un fichier audio déjà importé (local ou YouTube) vers le format
+interne cible utilisé par la transcription, et persiste le résultat.
+
+**Format cible — justifié, pas arbitraire** : 22050 Hz, mono, PCM 16 bits.
+`basic-pitch` (modèle de transcription retenu) déclare explicitement dans son
+propre code (`basic_pitch/constants.py`) `AUDIO_SAMPLE_RATE = 22050` et
+`AUDIO_N_CHANNELS = 1` — vérifié directement dans l'environnement du projet,
+pas supposé. Le PCM 16 bits est retenu pour le conteneur intermédiaire : la
+bibliothèque de chargement audio utilisée en interne par `basic-pitch`
+reconvertit de toute façon tout flux en flottant normalisé au chargement, un
+conteneur 16 bits est donc largement suffisant et évite de doubler la taille
+des fichiers intermédiaires sans gain de précision pour cet usage. Voir
+`backend/guitarriff/audio/ffmpeg.py` pour le détail du raisonnement.
+
+**Vérifications effectuées, dans cet ordre** :
+1. Disponibilité de FFmpeg/ffprobe sur le système (`503` sinon).
+2. Lecture des métadonnées réelles du fichier (`ffprobe`) — `422` si le
+   fichier n'est pas un audio exploitable (métadonnées illisibles, aucun flux
+   audio détecté), même s'il avait passé la vérification plus légère de
+   l'upload (Étape 4).
+3. Durée réelle comparée à `AUDIO_MAX_DURATION_SECONDS` (20 min par défaut)
+   — `422` si dépassée. Cette vérification est appliquée de façon uniforme,
+   que le fichier vienne d'un upload local ou de YouTube.
+4. Conversion effective (`ffmpeg`), avec délai maximal
+   (`FFMPEG_TIMEOUT_SECONDS`, 120 s par défaut) — `504` si dépassé.
+
+Réponse (`200`) — mêmes champs que `GET /audio-files/{file_id}`, avec les
+champs de normalisation renseignés :
+
+```json
+{
+  "...": "...",
+  "duration_seconds": 184.32,
+  "normalized": true,
+  "normalized_sample_rate": 22050,
+  "normalized_channels": 1
+}
+```
+
+Erreurs possibles :
+
+| Cas | Code HTTP | `error.code` |
+|---|---|---|
+| FFmpeg/ffprobe indisponible | 503 | `ffmpeg_unavailable` |
+| Fichier non exploitable (métadonnées illisibles, pas de flux audio) | 422 | `invalid_audio_file` |
+| Durée réelle supérieure à la limite autorisée | 422 | `audio_too_long` |
+| Délai de traitement dépassé | 504 | `audio_processing_timeout` |
+| Échec de conversion non attribuable au fichier (ex. bug) | 500 | `audio_processing_failed` |
 
 ### `GET /audio-files/{file_id}`
 
@@ -198,6 +250,22 @@ Erreurs possibles :
   timeout côté client — borné en pratique par le `socket_timeout` interne
   de `yt-dlp` (30 s). Voir `docs/PROJECT_STATUS.md` pour le détail de cet
   arbitrage.
+
+### Sécurité de l'invocation FFmpeg
+
+- **Aucune commande shell construite depuis une entrée utilisateur** :
+  `ffmpeg`/`ffprobe` sont toujours invoqués via une liste d'arguments
+  (`subprocess.run([...])`, jamais `shell=True`), et le seul chemin de
+  fichier transmis est celui déjà validé et stocké par `AudioFileStorage`
+  (identifiant interne `uuid4`) — jamais une chaîne fournie directement par
+  le client.
+- **Fichiers temporaires nettoyés** : la conversion écrit d'abord dans
+  `normalized.wav.tmp` puis le renomme atomiquement vers `normalized.wav` ;
+  ce fichier temporaire est systématiquement supprimé en cas d'échec ou de
+  dépassement du délai.
+- Le détail technique d'un échec FFmpeg (sortie `stderr`, qui peut mentionner
+  des chemins) n'est **jamais** renvoyé au client — seulement journalisé
+  côté serveur.
 
 ## Format des erreurs
 

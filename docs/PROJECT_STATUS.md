@@ -1,6 +1,69 @@
 # GuitarRiff — État du projet
 
-## Étape 5 — Acquisition depuis YouTube (terminée le 30/09/2026)
+## Étape 6 — Préparation et normalisation audio (terminée le 01/10/2026)
+
+> Statut : **normalisation FFmpeg fonctionnelle, testée avec de vrais fichiers audio. Toujours aucune transcription.**
+
+### Choix du format cible — vérifié, pas deviné
+
+Format retenu : **22050 Hz, mono, PCM 16 bits.** Justification concrète,
+vérifiée directement dans l'environnement du projet (pas une convention
+supposée) :
+
+```
+$ grep -n "AUDIO_SAMPLE_RATE\|AUDIO_N_CHANNELS" basic_pitch/constants.py
+31:AUDIO_SAMPLE_RATE = 22050
+32:AUDIO_N_CHANNELS = 1
+```
+
+`basic-pitch` — le modèle de transcription retenu pour le MVP (guitare/basse,
+décision Q3) — impose ces deux valeurs dans son propre code source. Le PCM 16
+bits est retenu pour le conteneur intermédiaire car la bibliothèque de
+chargement audio qu'utilise `basic-pitch` en interne reconvertit de toute
+façon tout flux en flottant normalisé à la lecture : un conteneur 16 bits
+(96 dB de plage dynamique) est donc amplement suffisant sans gain de
+précision mesurable, et évite de doubler la taille des fichiers
+intermédiaires pour rien. Si Demucs (séparation d'instruments, V2) est
+ajouté plus tard, il aura probablement besoin de 44100 Hz stéréo : ce n'est
+pas anticipé ici, un réglage dédié sera fait à ce moment-là plutôt que de
+deviner aujourd'hui une contrainte non encore confirmée.
+
+### Ce qui a été ajouté
+
+| Élément | État |
+|---|---|
+| `audio/ffmpeg.py` | Détection de disponibilité FFmpeg/ffprobe, lecture de métadonnées réelles (`probe_audio`), conversion vers le format cible (`normalize_audio`) — toujours via liste d'arguments, jamais de shell |
+| `audio/service.py` | Orchestration : vérifie la durée réelle avant conversion, persiste le résultat dans les métadonnées du fichier stocké |
+| `POST /audio-files/{id}/normalize` | Nouvelle route ; réutilise le fichier déjà stocké (upload local ou YouTube) |
+| `GET /health?verbose=true` | Ajoute `checks.ffmpeg_available` |
+| Nouveaux champs de métadonnées | `duration_seconds`, `normalized`, `normalized_sample_rate`, `normalized_channels` sur `StoredAudioFile`/`AudioFileMetadata` |
+| Nouvelle limite | `AUDIO_MAX_DURATION_SECONDS` (20 min par défaut), appliquée uniformément à tout audio (local ou YouTube) au moment de la normalisation |
+| Nettoyage | Écriture dans `normalized.wav.tmp` puis renommage atomique — aucun fichier partiel laissé en cas d'échec ou de timeout (vérifié par test) |
+| Tests | 21 nouveaux tests, **avec de vrais fichiers audio générés par FFmpeg** (sinusoïdes 44100 Hz stéréo) pour les cas valides, et des pannes FFmpeg simulées (timeout, échec, code shell inspecté) pour les cas d'erreur — backend à **115 tests au total** |
+
+### Vérifications réelles effectuées
+
+- `probe_audio` sur un vrai fichier généré (2 s, 44100 Hz, stéréo) : durée, fréquence et nombre de canaux correctement lus.
+- `normalize_audio` sur ce même fichier : sortie effectivement à 22050 Hz mono (reprobée pour confirmer, pas supposée).
+- Fichier WAV avec en-tête valide mais corps tronqué (passe la détection par contenu de l'Étape 4, mais pas une lecture réelle) : rejeté à la normalisation (`invalid_audio_file`), ni avant.
+- Panne FFmpeg simulée (code de sortie non nul, timeout) : erreur propre renvoyée, **aucun fichier `.tmp` résiduel** dans les deux cas (vérifié par test).
+- Absence de FFmpeg simulée (`shutil.which` neutralisé) : `503 ffmpeg_unavailable`, y compris via l'API complète.
+
+### Écarts honnêtes
+
+- Comme aux étapes précédentes, l'avertissement `httpx`/`TestClient` persiste, toujours sans impact.
+- La normalisation doit être déclenchée explicitement (`POST .../normalize`) ; elle n'est pas encore automatique après l'upload ou l'import YouTube — ce sera naturel de l'enchaîner à l'étape de transcription.
+- Toujours aucune transcription : conforme à la consigne de cette étape.
+
+### Résultats d'exécution réels
+
+```
+Backend : uv run pytest        → 115 passed
+Backend : uv run ruff check .  → All checks passed!
+Backend : uv run mypy backend/guitarriff → Success: no issues found in 26 source files
+```
+
+## Historique — Étape 5 : acquisition depuis YouTube (30/09/2026)
 
 > Statut : **import YouTube fonctionnel, sécurisé, testé sans réseau. Toujours aucune transcription.**
 

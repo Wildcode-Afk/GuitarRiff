@@ -1,7 +1,8 @@
 """Routes de gestion des fichiers audio importés localement.
 
-Ne déclenche aucune transcription ni traitement audio : cette route se limite
-à valider, stocker et référencer le fichier (Étape 4).
+Ne déclenche aucune transcription : au-delà du stockage (Étape 4), ce module
+expose aussi la normalisation audio via FFmpeg (Étape 6,
+`POST /{file_id}/normalize`).
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from fastapi import APIRouter, Depends, UploadFile
 from pydantic import BaseModel
 
 from guitarriff.acquisition.storage import AudioFileStorage, StoredAudioFile
+from guitarriff.audio.service import normalize_stored_audio
 from guitarriff.config import Settings, get_settings
 from guitarriff.errors import FileTooLargeError
 
@@ -27,6 +29,10 @@ class AudioFileMetadata(BaseModel):
     source: str = "upload"
     source_url: str | None = None
     title: str | None = None
+    duration_seconds: float | None = None
+    normalized: bool = False
+    normalized_sample_rate: int | None = None
+    normalized_channels: int | None = None
 
     @classmethod
     def from_record(cls, record: StoredAudioFile) -> AudioFileMetadata:
@@ -41,6 +47,10 @@ class AudioFileMetadata(BaseModel):
             source=record.source,
             source_url=record.source_url,
             title=record.title,
+            duration_seconds=record.duration_seconds,
+            normalized=record.normalized,
+            normalized_sample_rate=record.normalized_sample_rate,
+            normalized_channels=record.normalized_channels,
         )
 
 
@@ -68,6 +78,16 @@ def get_audio_file(
     file_id: str, storage: AudioFileStorage = Depends(get_storage)  # noqa: B008
 ) -> AudioFileMetadata:
     record = storage.get(file_id)
+    return AudioFileMetadata.from_record(record)
+
+
+@router.post("/{file_id}/normalize", response_model=AudioFileMetadata)
+def normalize_audio_file(
+    file_id: str,
+    settings: Settings = Depends(get_settings),  # noqa: B008
+    storage: AudioFileStorage = Depends(get_storage),  # noqa: B008
+) -> AudioFileMetadata:
+    record = normalize_stored_audio(file_id, settings, storage)
     return AudioFileMetadata.from_record(record)
 
 

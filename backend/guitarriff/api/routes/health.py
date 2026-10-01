@@ -12,6 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from guitarriff.audio.ffmpeg import ffmpeg_available
 from guitarriff.config import Settings, get_settings
 
 router = APIRouter(tags=["health"])
@@ -37,5 +38,8 @@ def health(verbose: bool = False, settings: Settings = Depends(get_settings)) ->
         "ytdlp_enabled": settings.ytdlp_enabled,
     }
     if verbose:
-        payload["checks"] = {"data_dir_writable": _is_data_dir_writable(settings)}
+        payload["checks"] = {
+            "data_dir_writable": _is_data_dir_writable(settings),
+            "ffmpeg_available": ffmpeg_available(),
+        }
     return payload

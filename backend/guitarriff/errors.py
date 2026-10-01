@@ -87,6 +87,41 @@ class YoutubeTimeoutError(AppError):
     error_code = "youtube_timeout"
 
 
+class FFmpegUnavailableError(AppError):
+    """FFmpeg (ou ffprobe) n'est pas disponible sur le système hôte."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    error_code = "ffmpeg_unavailable"
+
+
+class InvalidAudioFileError(AppError):
+    """Le fichier stocké n'est pas un audio exploitable (aucun flux audio
+    détecté, métadonnées illisibles) — distinct de `UnsupportedFileTypeError`,
+    qui couvre la vérification plus légère faite à l'upload (Étape 4)."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    error_code = "invalid_audio_file"
+
+
+class AudioTooLongError(AppError):
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    error_code = "audio_too_long"
+
+
+class AudioProcessingTimeoutError(AppError):
+    status_code = status.HTTP_504_GATEWAY_TIMEOUT
+    error_code = "audio_processing_timeout"
+
+
+class AudioProcessingError(AppError):
+    """Échec de conversion FFmpeg non attribuable à une entrée invalide
+    (ex. bug, ressource système). Le détail (stderr de FFmpeg) est
+    journalisé côté serveur uniquement — jamais renvoyé au client."""
+
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    error_code = "audio_processing_failed"
+
+
 class InvalidFileIdError(AppError):
     """Identifiant de fichier syntaxiquement invalide (pas un UUID).
 

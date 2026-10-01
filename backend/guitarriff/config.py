@@ -76,6 +76,16 @@ class Settings(BaseSettings):
     youtube_max_duration_seconds: int = Field(default=900, ge=1)  # 15 min
     youtube_download_timeout_seconds: int = Field(default=120, ge=1)
 
+    # Durée maximale (en secondes) acceptée pour TOUT fichier audio traité,
+    # quelle que soit sa source (upload local ou YouTube) — vérifiée au
+    # moment de la normalisation, où la durée réelle devient connue pour les
+    # deux cas de façon uniforme (voir acquisition/formats.py pour les
+    # vérifications propres à chaque source en amont).
+    audio_max_duration_seconds: int = Field(default=1200, ge=1)  # 20 min
+
+    # Délai maximal (en secondes) accordé à un seul appel ffprobe/ffmpeg.
+    ffmpeg_timeout_seconds: int = Field(default=120, ge=1)
+
     @field_validator("data_dir")
     @classmethod
     def _resolve_data_dir(cls, value: Path) -> Path:

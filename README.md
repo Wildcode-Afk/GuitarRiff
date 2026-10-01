@@ -63,6 +63,13 @@ curl -X POST http://127.0.0.1:8000/youtube-imports \
   -d '{"url": "https://www.youtube.com/watch?v=XXXXXXXXXXX"}'
 ```
 
+Normaliser un fichier déjà importé vers le format interne (22050 Hz, mono —
+voir `docs/API.md` pour la justification) :
+
+```bash
+curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/normalize
+```
+
 Voir `docs/API.md` pour le détail des routes et des erreurs.
 
 ## Tests

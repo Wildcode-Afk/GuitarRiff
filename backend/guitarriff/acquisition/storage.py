@@ -16,7 +16,7 @@ import json
 import re
 import shutil
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -36,6 +36,7 @@ from guitarriff.errors import (
 
 _META_FILENAME = "meta.json"
 _STORED_FILENAME_PREFIX = "source"
+_NORMALIZED_FILENAME = "normalized.wav"
 
 # Un nom de fichier d'origine ne sert qu'à l'affichage : on le limite en
 # longueur et on retire tout ce qui pourrait ressembler à un chemin ou à un
@@ -57,10 +58,19 @@ class StoredAudioFile:
     source: str = "upload"
     source_url: str | None = None
     title: str | None = None
+    # Renseigné après normalisation (Étape 6) — voir audio/service.py.
+    duration_seconds: float | None = None
+    normalized: bool = False
+    normalized_sample_rate: int | None = None
+    normalized_channels: int | None = None
 
     @property
     def stored_filename(self) -> str:
         return f"{_STORED_FILENAME_PREFIX}.{self.format}"
+
+    @property
+    def normalized_filename(self) -> str:
+        return _NORMALIZED_FILENAME
 
 
 def _sanitize_display_name(filename: str) -> str:
@@ -167,6 +177,33 @@ class AudioFileStorage:
             )
         data = json.loads(meta_path.read_text(encoding="utf-8"))
         return StoredAudioFile(**data)
+
+    def audio_path(self, file_id: str) -> Path:
+        """Chemin du fichier audio original stocké. Valide l'existence du
+        fichier avant de renvoyer le chemin (via `get`)."""
+
+        record = self.get(file_id)
+        return self._dir_for(uuid.UUID(file_id)) / record.stored_filename
+
+    def normalized_path(self, file_id: str) -> Path:
+        """Chemin cible pour la version normalisée (n'implique pas qu'elle
+        existe déjà — c'est au code appelant de la créer, voir
+        `audio/service.py`)."""
+
+        validated_id = _validate_file_id(file_id)
+        return self._dir_for(validated_id) / _NORMALIZED_FILENAME
+
+    def update_metadata(self, file_id: str, **updates: object) -> StoredAudioFile:
+        """Met à jour certains champs des métadonnées d'un fichier déjà
+        stocké (ex. après normalisation) et réécrit `meta.json`."""
+
+        current = self.get(file_id)
+        updated = replace(current, **updates)  # type: ignore[arg-type]
+        meta_path = self._dir_for(uuid.UUID(file_id)) / _META_FILENAME
+        meta_path.write_text(
+            json.dumps(asdict(updated), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return updated
 
     def delete(self, file_id: str) -> None:
         validated_id = _validate_file_id(file_id)
