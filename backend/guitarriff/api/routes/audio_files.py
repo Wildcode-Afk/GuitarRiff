@@ -24,6 +24,9 @@ class AudioFileMetadata(BaseModel):
     size_bytes: int
     uploaded_at: str
     status: str
+    source: str = "upload"
+    source_url: str | None = None
+    title: str | None = None
 
     @classmethod
     def from_record(cls, record: StoredAudioFile) -> AudioFileMetadata:
@@ -35,6 +38,9 @@ class AudioFileMetadata(BaseModel):
             size_bytes=record.size_bytes,
             uploaded_at=record.uploaded_at,
             status=record.status,
+            source=record.source,
+            source_url=record.source_url,
+            title=record.title,
         )
 
 

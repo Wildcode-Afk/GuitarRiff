@@ -120,6 +120,85 @@ Supprime le fichier et ses métadonnées. `204` en cas de succès, `404`
   répertoire d'upload (nettoyage manuel ou tâche planifiée à ajouter plus
   tard) — non exposé via l'API à ce stade.
 
+### `POST /youtube-imports`
+
+Importe l'audio d'une vidéo YouTube. **Usage strictement personnel, sous la
+responsabilité de l'utilisateur final** (décision Q1, voir
+`docs/TECHNICAL_DECISIONS.md`) — ne contourne aucune restriction d'accès
+(pas de cookies, pas d'authentification, pas de contournement géographique).
+
+Corps de la requête :
+
+```json
+{ "url": "https://www.youtube.com/watch?v=XXXXXXXXXXX" }
+```
+
+**URL acceptées** : `youtube.com`, `www.youtube.com`, `m.youtube.com`,
+`music.youtube.com`, `youtu.be` — sous forme `/watch?v=`, `/shorts/`,
+`/embed/`, `/live/`, ou lien court `youtu.be/<id>`. Toute autre URL est
+rejetée. L'URL réellement utilisée pour l'extraction est **toujours
+reconstruite** à partir de l'identifiant de vidéo validé, jamais la chaîne
+fournie telle quelle.
+
+**Limites appliquées avant tout téléchargement** :
+- Durée maximale : `YOUTUBE_MAX_DURATION_SECONDS` (15 min par défaut) —
+  vérifiée à partir des métadonnées, avant de télécharger quoi que ce soit.
+- Flux en direct (durée indéterminée) : refusés.
+- Taille du fichier téléchargé : bornée par `MAX_UPLOAD_SIZE_MB` (même
+  limite que l'import de fichier local).
+- Temps total de l'opération : `YOUTUBE_DOWNLOAD_TIMEOUT_SECONDS` (120 s par
+  défaut).
+
+Réponse (`201`) — même forme que `POST /audio-files`, avec les champs de
+provenance renseignés :
+
+```json
+{
+  "file_id": "...",
+  "original_filename": "dQw4w9WgXcQ.wav",
+  "format": "wav",
+  "content_type": "audio/wav",
+  "size_bytes": 4823110,
+  "uploaded_at": "...",
+  "status": "stored",
+  "source": "youtube",
+  "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "title": "Titre de la vidéo"
+}
+```
+
+Erreurs possibles :
+
+| Cas | Code HTTP | `error.code` |
+|---|---|---|
+| URL non reconnue comme une URL YouTube valide | 400 | `invalid_youtube_url` |
+| Vidéo trop longue, ou flux en direct | 422 | `youtube_video_too_long` |
+| Vidéo indisponible, privée, ou échec d'extraction/téléchargement | 502 | `youtube_unavailable` |
+| Délai maximal dépassé | 504 | `youtube_timeout` |
+| Fichier résultant trop volumineux | 413 | `file_too_large` |
+
+### Sécurité et limites de l'acquisition YouTube
+
+- **Aucune commande système n'est construite à partir d'une entrée
+  utilisateur** : ce module utilise exclusivement l'API Python de `yt-dlp`
+  (`import yt_dlp`), jamais un appel `subprocess`/shell — il n'existe donc
+  aucune chaîne de commande dans laquelle une URL pourrait s'injecter.
+- **Aucun contournement de restriction** : pas de cookies, pas
+  d'authentification, pas de contournement géographique. Une vidéo privée,
+  restreinte par l'âge ou indisponible échoue normalement (`youtube_unavailable`)
+  plutôt que d'être contournée.
+- Le fichier téléchargé passe par **le même pipeline de sécurité que
+  l'upload local** (Étape 4) : détection de format par contenu réel,
+  identifiant interne `uuid4`, aucun chemin construit à partir d'une donnée
+  utilisateur (titre de vidéo, nom de fichier).
+- **Limite de temps honnête** : le délai configuré borne le temps d'attente
+  côté appelant (l'API répond en `504` au-delà). Comme l'extraction passe
+  par un thread plutôt qu'un sous-processus, ce thread peut en théorie
+  continuer quelques instants en arrière-plan après le signalement du
+  timeout côté client — borné en pratique par le `socket_timeout` interne
+  de `yt-dlp` (30 s). Voir `docs/PROJECT_STATUS.md` pour le détail de cet
+  arbitrage.
+
 ## Format des erreurs
 
 Toutes les erreurs (validation, route inconnue, méthode non autorisée,

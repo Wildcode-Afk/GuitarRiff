@@ -61,6 +61,32 @@ class FileTooLargeError(AppError):
     error_code = "file_too_large"
 
 
+class InvalidYoutubeUrlError(AppError):
+    """URL fournie non reconnue comme une URL YouTube valide (hôte non
+    autorisé, schéma inattendu, identifiant de vidéo introuvable)."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "invalid_youtube_url"
+
+
+class YoutubeVideoTooLongError(AppError):
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    error_code = "youtube_video_too_long"
+
+
+class YoutubeUnavailableError(AppError):
+    """Vidéo indisponible (privée, supprimée, restreinte) ou échec
+    d'extraction côté yt-dlp (changement d'API YouTube, erreur réseau)."""
+
+    status_code = status.HTTP_502_BAD_GATEWAY
+    error_code = "youtube_unavailable"
+
+
+class YoutubeTimeoutError(AppError):
+    status_code = status.HTTP_504_GATEWAY_TIMEOUT
+    error_code = "youtube_timeout"
+
+
 class InvalidFileIdError(AppError):
     """Identifiant de fichier syntaxiquement invalide (pas un UUID).
 

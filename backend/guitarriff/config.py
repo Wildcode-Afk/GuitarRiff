@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     # machine modeste (voir docs/TECHNICAL_DECISIONS.md, D6).
     max_upload_size_mb: int = Field(default=100, ge=1)
 
+    # Décision Q1 (docs/TECHNICAL_DECISIONS.md) : acquisition YouTube via
+    # yt-dlp, usage personnel, sous la responsabilité de l'utilisateur final.
+    youtube_max_duration_seconds: int = Field(default=900, ge=1)  # 15 min
+    youtube_download_timeout_seconds: int = Field(default=120, ge=1)
+
     @field_validator("data_dir")
     @classmethod
     def _resolve_data_dir(cls, value: Path) -> Path:
@@ -93,6 +98,13 @@ class Settings(BaseSettings):
         """
 
         return self.data_dir / "uploads"
+
+    @property
+    def youtube_tmp_dir(self) -> Path:
+        """Répertoire temporaire contrôlé pour les téléchargements YouTube en
+        cours, nettoyé après coup — voir `acquisition/youtube.py`."""
+
+        return self.data_dir / "tmp" / "youtube"
 
 
 def get_settings() -> Settings:

@@ -1,11 +1,12 @@
 """Point d'entrée de l'API FastAPI.
 
-À ce stade (Étape 4), l'application expose : la vérification de démarrage
+À ce stade (Étape 5), l'application expose : la vérification de démarrage
 (`/health`), la version (`/version`), l'import/consultation/suppression de
-fichiers audio locaux (`/audio-files`), une gestion d'erreurs cohérente et la
-configuration CORS pour le frontend. Aucune route de téléchargement YouTube ni
-de transcription n'existe encore : elles seront ajoutées derrière l'interface
-`Transcriber` décrite dans docs/ARCHITECTURE.md, une fois cette étape validée.
+fichiers audio locaux (`/audio-files`), l'import audio depuis YouTube
+(`/youtube-imports`), une gestion d'erreurs cohérente et la configuration
+CORS pour le frontend. Aucune transcription n'existe encore : elle sera
+ajoutée derrière l'interface `Transcriber` décrite dans
+docs/ARCHITECTURE.md, une fois cette étape validée.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from guitarriff.api.routes.audio_files import router as audio_files_router
 from guitarriff.api.routes.health import router as health_router
 from guitarriff.api.routes.version import router as version_router
+from guitarriff.api.routes.youtube_imports import router as youtube_imports_router
 from guitarriff.config import Settings, get_settings
 from guitarriff.errors import register_error_handlers
 from guitarriff.logging_config import configure_logging, get_logger
@@ -26,11 +28,11 @@ from guitarriff.logging_config import configure_logging, get_logger
 logger = get_logger(__name__)
 
 API_DESCRIPTION = """
-API de GuitarRiff — socle serveur (Étape 3).
+API de GuitarRiff — socle serveur (Étape 5).
 
-Aucune fonctionnalité de téléchargement YouTube ni de transcription audio
-n'est encore exposée à ce stade. Voir `docs/API.md` pour le détail des
-routes disponibles et le format des erreurs.
+Aucune fonctionnalité de transcription audio n'est encore exposée à ce
+stade. Voir `docs/API.md` pour le détail des routes disponibles et le
+format des erreurs.
 """.strip()
 
 
@@ -73,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(version_router)
     app.include_router(audio_files_router)
+    app.include_router(youtube_imports_router)
 
     return app
 

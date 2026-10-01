@@ -54,6 +54,15 @@ Importer un fichier audio local (WAV, FLAC, OGG, M4A ou MP3) :
 curl -X POST http://127.0.0.1:8000/audio-files -F "file=@/chemin/vers/mon_fichier.wav"
 ```
 
+Importer l'audio d'une vidéo YouTube (usage personnel, sous votre
+responsabilité — voir `docs/TECHNICAL_DECISIONS.md`, Q1) :
+
+```bash
+curl -X POST http://127.0.0.1:8000/youtube-imports \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.youtube.com/watch?v=XXXXXXXXXXX"}'
+```
+
 Voir `docs/API.md` pour le détail des routes et des erreurs.
 
 ## Tests

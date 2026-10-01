@@ -53,6 +53,10 @@ class StoredAudioFile:
     size_bytes: int
     uploaded_at: str
     status: str = "stored"
+    # Origine du fichier : "upload" (Étape 4) ou "youtube" (Étape 5).
+    source: str = "upload"
+    source_url: str | None = None
+    title: str | None = None
 
     @property
     def stored_filename(self) -> str:
@@ -90,7 +94,16 @@ class AudioFileStorage:
         # est dérivé d'une entrée utilisateur.
         return self._root / str(file_id)
 
-    def save(self, *, filename: str, declared_content_type: str, content: bytes) -> StoredAudioFile:
+    def save(
+        self,
+        *,
+        filename: str,
+        declared_content_type: str,
+        content: bytes,
+        source: str = "upload",
+        source_url: str | None = None,
+        title: str | None = None,
+    ) -> StoredAudioFile:
         """Valide et stocke un fichier audio. Lève une `AppError` (voir
         `errors.py`) si le format n'est pas supporté ou si la taille dépasse
         la limite configurée."""
@@ -131,6 +144,9 @@ class AudioFileStorage:
             content_type=detected.content_type,
             size_bytes=len(content),
             uploaded_at=datetime.now(UTC).isoformat(),
+            source=source,
+            source_url=source_url,
+            title=title,
         )
 
         target_dir = self._dir_for(file_id)

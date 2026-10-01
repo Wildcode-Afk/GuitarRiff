@@ -1,6 +1,52 @@
 # GuitarRiff — État du projet
 
-## Étape 4 — Gestion des fichiers audio locaux (terminée le 30/09/2026)
+## Étape 5 — Acquisition depuis YouTube (terminée le 30/09/2026)
+
+> Statut : **import YouTube fonctionnel, sécurisé, testé sans réseau. Toujours aucune transcription.**
+
+### Vérification préalable de `yt-dlp` (avant implémentation, comme demandé)
+
+| Critère | Constat |
+|---|---|
+| Maintenance | Très active : releases quasi quotidiennes (dernière vérifiée : `2026.08.19`, canaux stable/nightly/master) |
+| Licence | **Unlicense** (domaine public) — aucune incompatibilité avec le reste du projet |
+| Dépendances | Légères : `requests`, `certifi`, `websockets`, `mutagen`, `pycryptodomex`, `brotli` — aucun conflit avec les dépendances existantes (notamment aucun chevauchement avec la contrainte TensorFlow de `basic-pitch`) |
+| Sécurité | 0 vulnérabilité connue au moment de la vérification |
+| Installation réelle | Testée dans l'environnement du projet (`uv sync`) — fonctionne sous Python 3.11 sans ajustement |
+
+### Ce qui a été ajouté
+
+| Élément | État |
+|---|---|
+| `acquisition/youtube_url.py` | Validation stricte des URL (hôtes YouTube connus uniquement) et normalisation en URL canonique reconstruite à partir de l'identifiant de vidéo — jamais la chaîne brute de l'utilisateur |
+| `acquisition/youtube.py` | Métadonnées (`fetch_metadata`) puis téléchargement/extraction audio (`download_audio`) via **l'API Python de yt-dlp**, jamais un appel système/shell |
+| Limites appliquées | Durée max (`YOUTUBE_MAX_DURATION_SECONDS`, 15 min par défaut) vérifiée *avant* tout téléchargement, flux en direct refusés, taille bornée (`max_filesize` yt-dlp + réutilisation de `MAX_UPLOAD_SIZE_MB`), délai global (`YOUTUBE_DOWNLOAD_TIMEOUT_SECONDS`) |
+| Réutilisation du pipeline de sécurité de l'Étape 4 | Le fichier téléchargé passe par `AudioFileStorage.save()` : détection de format par contenu réel, identifiant interne `uuid4`, aucun chemin construit à partir d'une donnée utilisateur |
+| `POST /youtube-imports` | Nouvelle route, erreurs dédiées (`invalid_youtube_url` 400, `youtube_video_too_long` 422, `youtube_unavailable` 502, `youtube_timeout` 504) |
+| `docs/API.md` | Section complète sur `/youtube-imports`, garanties de sécurité, limites honnêtes |
+| Tests | 39 nouveaux tests, **entièrement simulés (mocks de `yt_dlp.YoutubeDL`), aucun accès réseau ni vidéo réelle** — backend à **94 tests au total** |
+
+### Respect des consignes de conformité
+
+- **Pas de contournement de restriction** : aucune option de cookies, d'authentification ou de contournement géographique n'est utilisée. Une vidéo privée/restreinte échoue normalement (`youtube_unavailable`).
+- **Pas de commande système construite depuis une entrée utilisateur** : ce module n'utilise ni `subprocess` ni `os.system` nulle part — vérifié par un test dédié qui inspecte le code source du module pour s'en assurer.
+- **URL toujours validée et reconstruite** avant d'atteindre `yt-dlp` : testé avec des tentatives d'URL malveillantes (hôte usurpé, identifiants dans l'URL, schéma `javascript:`, sous-domaine trompeur `youtube.com.evil.com`).
+
+### Écart honnête à signaler
+
+- Le délai maximal (`YOUTUBE_DOWNLOAD_TIMEOUT_SECONDS`) est appliqué via un thread Python avec timeout, pas via un sous-processus tuable. Cela borne proprement le temps d'attente **côté appelant** (l'API renvoie bien une erreur `504` à l'heure prévue), mais le thread `yt-dlp` sous-jacent peut en théorie continuer quelques secondes de plus en arrière-plan avant de s'arrêter de lui-même (borné par son propre `socket_timeout` interne de 30 s). Un vrai arrêt forcé nécessiterait de passer par un sous-processus dédié — non fait à ce stade pour rester sur l'API Python de yt-dlp (plus simple à tester, et qui évite toute question de construction de commande). À revisiter si ce comportement pose problème en usage réel.
+- Comme à l'Étape 4, le nettoyage du répertoire temporaire (`data/tmp/youtube/`) est géré par un `finally` à chaque appel ; aucun nettoyage périodique automatique des résidus d'un arrêt brutal du processus n'est encore en place (utilitaire `_cleanup_stale_tmp_dirs` prévu mais non exposé).
+
+### Résultats d'exécution réels
+
+```
+Backend : uv run pytest        → 94 passed
+Backend : uv run ruff check .  → All checks passed!
+Backend : uv run mypy backend/guitarriff → Success: no issues found in 24 source files
+Frontend : npm run test        → 1 passed (inchangé)
+```
+
+## Historique — Étape 4 : gestion des fichiers audio locaux (30/09/2026)
 
 > Statut : **import de fichiers audio locaux fonctionnel et sécurisé. Toujours aucune transcription.**
 
