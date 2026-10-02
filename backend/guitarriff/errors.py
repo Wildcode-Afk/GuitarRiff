@@ -122,6 +122,51 @@ class AudioProcessingError(AppError):
     error_code = "audio_processing_failed"
 
 
+class DemucsNotInstalledError(AppError):
+    """La dépendance optionnelle `separation` (Demucs/torch) n'est pas
+    installée — voir docs/MODELS.md."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    error_code = "demucs_not_installed"
+
+
+class SeparationModelUnavailableError(AppError):
+    """Le modèle de séparation demandé n'a pas pu être chargé (absent du
+    cache local et téléchargement désactivé, ou échec réseau)."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    error_code = "separation_model_unavailable"
+
+
+class InsufficientMemoryError(AppError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    error_code = "insufficient_memory"
+
+
+class SeparationTimeoutError(AppError):
+    status_code = status.HTTP_504_GATEWAY_TIMEOUT
+    error_code = "separation_timeout"
+
+
+class SeparationError(AppError):
+    """Échec de séparation non attribuable à une cause déjà identifiée
+    (modèle absent, mémoire insuffisante). Le détail est journalisé côté
+    serveur uniquement."""
+
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    error_code = "separation_failed"
+
+
+class SeparationInProgressError(AppError):
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "separation_in_progress"
+
+
+class InvalidSeparationModeError(AppError):
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "invalid_separation_mode"
+
+
 class InvalidFileIdError(AppError):
     """Identifiant de fichier syntaxiquement invalide (pas un UUID).
 

@@ -70,7 +70,19 @@ voir `docs/API.md` pour la justification) :
 curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/normalize
 ```
 
-Voir `docs/API.md` pour le détail des routes et des erreurs.
+Séparer les instruments d'un fichier déjà importé (Demucs — **dépendance
+optionnelle**, voir `docs/MODELS.md` pour l'installation et les questions de
+licence avant usage au-delà du personnel) :
+
+```bash
+uv sync --extra separation  # après avoir installé torch (voir docs/MODELS.md)
+curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/separate \
+  -H "Content-Type: application/json" -d '{"mode": "htdemucs"}'
+curl http://127.0.0.1:8000/audio-files/<file_id>/separate/htdemucs
+```
+
+Voir `docs/API.md` pour le détail des routes et des erreurs, et
+`docs/MODELS.md` pour les modèles disponibles et leurs limites.
 
 ## Tests
 
@@ -101,3 +113,4 @@ existent (pas encore de logique de transcription/tablature).
 - `docs/ARCHITECTURE.md` — architecture proposée et pipeline
 - `docs/FEATURE_MATRIX.md` — classement des fonctionnalités (MVP / V2 / expérimental)
 - `docs/TECHNICAL_DECISIONS.md` — décisions techniques justifiées et questions ouvertes
+- `docs/MODELS.md` — installation et licences des modèles de séparation d'instruments

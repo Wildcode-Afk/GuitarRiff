@@ -16,7 +16,7 @@ import json
 import re
 import shutil
 import uuid
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -63,6 +63,10 @@ class StoredAudioFile:
     normalized: bool = False
     normalized_sample_rate: int | None = None
     normalized_channels: int | None = None
+    # Modes de séparation (Étape 7) déjà calculés et mis en cache pour ce
+    # fichier — voir separation/service.py. Informatif : la source de vérité
+    # pour "est-ce en cache ?" reste le `meta.json` sous separated/<mode>/.
+    separated_modes: list[str] = field(default_factory=list)
 
     @property
     def stored_filename(self) -> str:
@@ -192,6 +196,14 @@ class AudioFileStorage:
 
         validated_id = _validate_file_id(file_id)
         return self._dir_for(validated_id) / _NORMALIZED_FILENAME
+
+    def separated_dir(self, file_id: str, mode: str) -> Path:
+        """Répertoire des pistes séparées pour `mode`. `mode` doit toujours
+        provenir de `separation.models.AVAILABLE_MODES` (jamais d'une chaîne
+        utilisateur non validée) — voir `separation/service.py`."""
+
+        validated_id = _validate_file_id(file_id)
+        return self._dir_for(validated_id) / "separated" / mode
 
     def update_metadata(self, file_id: str, **updates: object) -> StoredAudioFile:
         """Met à jour certains champs des métadonnées d'un fichier déjà

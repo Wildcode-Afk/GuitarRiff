@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends
 
 from guitarriff.audio.ffmpeg import ffmpeg_available
 from guitarriff.config import Settings, get_settings
+from guitarriff.separation.capabilities import get_system_capabilities
 
 router = APIRouter(tags=["health"])
 
@@ -38,8 +39,20 @@ def health(verbose: bool = False, settings: Settings = Depends(get_settings)) ->
         "ytdlp_enabled": settings.ytdlp_enabled,
     }
     if verbose:
+        caps = get_system_capabilities()
         payload["checks"] = {
             "data_dir_writable": _is_data_dir_writable(settings),
             "ffmpeg_available": ffmpeg_available(),
+            "separation": {
+                "cpu_count": caps.cpu_count,
+                "available_memory_mb": (
+                    round(caps.available_memory_mb)
+                    if caps.available_memory_mb is not None
+                    else None
+                ),
+                "torch_installed": caps.torch_installed,
+                "demucs_installed": caps.demucs_installed,
+                "recommended_device": caps.recommended_device,
+            },
         }
     return payload

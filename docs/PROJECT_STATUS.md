@@ -1,6 +1,59 @@
 # GuitarRiff — État du projet
 
-## Étape 6 — Préparation et normalisation audio (terminée le 01/10/2026)
+## Étape 7 — Séparation d'instruments (terminée le 02/10/2026)
+
+> Statut : **module de séparation fonctionnel et testé (mocks), Demucs en dépendance optionnelle non installée dans cet environnement. Validation en conditions réelles encore à faire — voir écarts honnêtes.**
+
+### Vérification préalable (avant implémentation, comme demandé)
+
+| Critère | Constat |
+|---|---|
+| Licence du **code** Demucs | **MIT**, confirmé par plusieurs sources indépendantes (PyPI, dépôt officiel, distributions tierces) |
+| Licence des **poids pré-entraînés** | **Nuancée, non définitivement tranchée publiquement** — l'auteur aurait indiqué dans des discussions GitHub que les poids sont fournis "à des fins de recherche" (conditions du jeu de données MusDB), malgré des métadonnées "MIT" incohérentes vues sur certaines pages de modèles. Documenté en détail, sans trancher à la place de l'utilisateur, dans `docs/MODELS.md` |
+| Compatibilité Python 3.11 | Confirmée (métadonnées PyPI : `demucs>=4.0` nécessite `python>=3.10`, `torch>=2.1`, wheels `cp311` disponibles) |
+| Installation réelle testée | **Non réalisable dans ce bac à sable** : `torch` depuis l'index PyPI par défaut entraîne toute la pile CUDA (vérifié par résolution de dépendances réelle, plusieurs Go), et l'index CPU dédié de PyTorch (`download.pytorch.org`) n'est pas accessible depuis le réseau de cet environnement. Recommandation d'installation documentée dans `docs/MODELS.md` |
+
+### Ce qui a été ajouté
+
+| Élément | État |
+|---|---|
+| `separation/capabilities.py` | Détection CPU/mémoire (`/proc/meminfo`, aucune dépendance ajoutée)/torch/demucs/CUDA — aucune supposition, lu réellement |
+| `separation/models.py` | 3 modes : `none`, `htdemucs` (4 pistes), `htdemucs_6s` (6 pistes, expérimental) — limites connues documentées dans chaque réponse API |
+| `separation/progress.py` | Suivi de progression en mémoire, par étapes (queued → loading_model → separating → writing_stems → done/error) |
+| `separation/engine.py` | **Seul point d'import de `torch`/`demucs`** (même principe d'isolation que `basic-pitch`) ; dépendance optionnelle, absence gérée proprement |
+| `separation/service.py` | Orchestration : cache disque (évite de relancer inutilement), vérification mémoire, vérification de durée, exécution en arrière-plan, détection de concurrence |
+| `POST/GET /audio-files/{id}/separate[/{mode}]` | Nouvelles routes, + téléchargement de piste individuelle |
+| `GET /health?verbose=true` | Ajoute `checks.separation` (capacités détectées) |
+| `pyproject.toml` | Extra optionnel `separation` (Demucs), **volontairement séparé de `dev`** — pas installé par défaut |
+| `docs/MODELS.md` | Nouveau document : installation, avertissement CUDA vérifié, limites de chaque mode, section licence complète |
+| Tests | 33 nouveaux tests — backend à **155 tests au total** |
+
+### Stratégie de test (conforme à la consigne "sans télécharger un gros modèle")
+
+- **Capacités, modèles, progression** : tests unitaires classiques, rapides.
+- **Moteur (`engine.py`)** : le cas "Demucs non installé" est testé **réellement, sans aucun mock** — cette dépendance optionnelle est absente de l'environnement de test, ce qui permet de vérifier pour de vrai le comportement attendu en son absence, sans réseau ni téléchargement. Les cas "Demucs installé" (succès, échec de chargement du modèle, échec de la séparation elle-même) sont simulés via un faux point d'import.
+- **Service** : fichiers audio réels générés par FFmpeg (comme à l'Étape 6), moteur simulé. Couvre le cache, la mémoire insuffisante, la durée trop longue, l'exécution concurrente, la progression, le timeout (simulé en manipulant directement l'horodatage de départ, sans attendre pour de vrai).
+- **API** : un test d'intégration bout-en-bout **sans aucun mock** vérifie que l'absence réelle de Demucs est gérée proprement jusqu'à la réponse HTTP (`stage: "error"`, message clair), sans jamais nécessiter de téléchargement.
+
+### Écarts honnêtes (importants pour cette étape)
+
+1. **L'intégration Demucs elle-même n'a pas pu être exécutée contre une vraie installation** dans ce bac à sable (contrainte réseau/disque, voir `docs/MODELS.md`). Le code suit l'API Python documentée par Demucs, mais doit être validé en conditions réelles avant mise en production.
+2. **Licence des poids pré-entraînés non tranchée** — documentée honnêtement dans `docs/MODELS.md`, recommandation d'usage personnel uniquement tant que la question n'est pas clarifiée pour un usage commercial/de redistribution.
+3. **Détection de cache local des modèles non implémentée** : `SEPARATION_ALLOW_MODEL_DOWNLOAD=false` refuse tout chargement plutôt que de vérifier si le modèle est déjà présent — nous n'avons pas pu vérifier de façon fiable l'emplacement de ce cache dans cet environnement.
+4. **Timeout "honnête"**, comme pour yt-dlp (Étape 5) : borne l'état visible côté client, pas une extinction forcée du thread sous-jacent.
+5. **Progression grossière, par paliers** (pas un pourcentage continu fin) : nous n'avons pas pu vérifier de façon fiable une éventuelle API de callback interne plus précise de Demucs dans cet environnement.
+6. **État de progression en mémoire** (process unique) : perdu en cas de redémarrage pendant un calcul en cours ; le cache sur disque, lui, survit.
+
+### Résultats d'exécution réels
+
+```
+Backend : uv run pytest        → 155 passed
+Backend : uv run ruff check .  → All checks passed!
+Backend : uv run mypy backend/guitarriff → Success: no issues found in 32 source files
+Frontend : npm run test        → 1 passed (inchangé)
+```
+
+## Historique — Étape 6 : préparation et normalisation audio (01/10/2026)
 
 > Statut : **normalisation FFmpeg fonctionnelle, testée avec de vrais fichiers audio. Toujours aucune transcription.**
 

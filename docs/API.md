@@ -45,7 +45,14 @@ Avec `?verbose=true`, un champ `checks` est ajouté :
   "...": "...",
   "checks": {
     "data_dir_writable": true,
-    "ffmpeg_available": true
+    "ffmpeg_available": true,
+    "separation": {
+      "cpu_count": 4,
+      "available_memory_mb": 3200,
+      "torch_installed": false,
+      "demucs_installed": false,
+      "recommended_device": "cpu"
+    }
   }
 }
 ```
@@ -266,6 +273,96 @@ Erreurs possibles :
 - Le détail technique d'un échec FFmpeg (sortie `stderr`, qui peut mentionner
   des chemins) n'est **jamais** renvoyé au client — seulement journalisé
   côté serveur.
+
+### `POST /audio-files/{file_id}/separate`
+
+Démarre une séparation d'instruments (Demucs — **dépendance optionnelle, voir
+`docs/MODELS.md`**). Renvoie toujours `202 Accepted` immédiatement : le
+résultat se consulte via `GET .../separate/{mode}`. Si le résultat est déjà
+en cache pour ce fichier et ce mode, aucune nouvelle exécution n'est lancée —
+le cache est immédiatement disponible via la route `GET`.
+
+Corps de la requête :
+
+```json
+{ "mode": "htdemucs" }
+```
+
+**Modes disponibles** (voir `docs/MODELS.md` pour le détail des limites) :
+
+| Mode | Pistes produites |
+|---|---|
+| `none` | `mixture` (pas de séparation) |
+| `htdemucs` | `drums`, `bass`, `other`, `vocals` |
+| `htdemucs_6s` *(expérimental)* | + `guitar`, `piano` |
+
+Erreurs possibles :
+
+| Cas | Code HTTP | `error.code` |
+|---|---|---|
+| Mode inconnu | 400 | `invalid_separation_mode` |
+| Fichier inconnu | 404 | `not_found` |
+| Durée du fichier trop longue (`AUDIO_MAX_DURATION_SECONDS`) | 422 | `audio_too_long` |
+| Mémoire disponible insuffisante (`SEPARATION_MIN_AVAILABLE_MEMORY_MB`) | 503 | `insufficient_memory` |
+| Une séparation est déjà en cours pour ce fichier/mode | 409 | `separation_in_progress` |
+
+### `GET /audio-files/{file_id}/separate/{mode}`
+
+Consulte l'état d'une séparation : en attente, en cours (avec progression
+approximative par étapes), terminée, ou en erreur.
+
+Réponse :
+
+```json
+{
+  "file_id": "...",
+  "mode": "htdemucs",
+  "stage": "separating",
+  "progress_percent": 50,
+  "stems": null,
+  "error": null,
+  "notes": "La piste 'bass' est directement exploitable [...] pas une guitare isolée. [...]",
+  "experimental": false
+}
+```
+
+`stage` vaut l'un de : `not_started`, `queued`, `loading_model`, `separating`,
+`writing_stems`, `done`, `error`. `progress_percent` est une estimation
+**grossière, par paliers** (voir `docs/MODELS.md` pour pourquoi un
+pourcentage continu fin n'a pas pu être garanti). Le champ **`notes` est
+toujours présent et doit être affiché à l'utilisateur** : il rappelle les
+limites connues du mode utilisé, conformément à l'exigence de ne jamais
+présenter une piste séparée comme un instrument parfaitement isolé.
+
+Si Demucs n'est pas installé (dépendance optionnelle absente), `stage`
+devient `error` avec un message l'indiquant clairement — jamais un plantage
+serveur (vérifié par un test d'intégration réel, sans mock, profitant du fait
+que cette dépendance est absente de l'environnement de test).
+
+### `GET /audio-files/{file_id}/separate/{mode}/stems/{stem_name}`
+
+Télécharge une piste déjà calculée (fichier WAV). `404` si cette piste n'a
+pas encore été produite, `422` (`validation_error`) si `stem_name` ne fait
+pas partie des pistes du mode demandé.
+
+### Limites matérielles et sécurité de la séparation
+
+- **Mémoire** : lue directement depuis `/proc/meminfo` (aucune dépendance
+  ajoutée) avant de démarrer — refus clair si insuffisante, plutôt qu'un
+  plantage ou un système à l'arrêt.
+- **CPU uniquement à ce stade** : `device="cpu"` fixé en dur dans
+  `separation/engine.py`, aucune détection ni usage de GPU pour l'instant
+  (voir `docs/MODELS.md`).
+- **Progression exposée**, mais stockée en mémoire (process unique) — perdue
+  en cas de redémarrage du serveur pendant un calcul en cours ; le résultat
+  déjà mis en cache sur disque, lui, survit à un redémarrage.
+- **Limite de temps honnête** : comme pour l'acquisition YouTube (Étape 5),
+  le délai (`SEPARATION_TIMEOUT_SECONDS`) borne l'état visible côté client ;
+  le thread sous-jacent peut en théorie continuer quelques instants de plus
+  en arrière-plan. Voir `docs/PROJECT_STATUS.md`.
+- **Aucun chemin construit depuis une entrée utilisateur** : le nom de piste
+  demandé en téléchargement est vérifié contre la liste fixe des pistes du
+  mode avant toute construction de chemin.
 
 ## Format des erreurs
 

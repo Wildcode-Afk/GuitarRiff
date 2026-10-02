@@ -86,6 +86,13 @@ class Settings(BaseSettings):
     # Délai maximal (en secondes) accordé à un seul appel ffprobe/ffmpeg.
     ffmpeg_timeout_seconds: int = Field(default=120, ge=1)
 
+    # Séparation d'instruments (Demucs, dépendance optionnelle — voir
+    # docs/MODELS.md). Désactivée par défaut tant que la bibliothèque n'est
+    # pas installée ; voir separation/capabilities.py pour la détection.
+    separation_min_available_memory_mb: int = Field(default=1500, ge=1)
+    separation_timeout_seconds: int = Field(default=900, ge=1)  # 15 min (CPU)
+    separation_allow_model_download: bool = True
+
     @field_validator("data_dir")
     @classmethod
     def _resolve_data_dir(cls, value: Path) -> Path:

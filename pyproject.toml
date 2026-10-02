@@ -22,6 +22,14 @@ dev = [
     "ruff>=0.6,<1.0",
     "mypy>=1.11,<2.0",
 ]
+# Dépendance OPTIONNELLE et volontairement séparée de `dev` — voir
+# docs/MODELS.md. `torch` depuis l'index PyPI par défaut embarque toute la
+# pile CUDA (plusieurs Go, vérifié par une résolution de dépendances réelle),
+# même pour un usage CPU : installer plutôt torch depuis l'index CPU dédié
+# avant demucs (voir docs/MODELS.md pour la commande exacte).
+separation = [
+    "demucs>=4.0,<5.0",
+]
 
 [build-system]
 requires = ["hatchling"]
