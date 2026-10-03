@@ -75,7 +75,8 @@ async def upload_audio_file(
 
 @router.get("/{file_id}", response_model=AudioFileMetadata)
 def get_audio_file(
-    file_id: str, storage: AudioFileStorage = Depends(get_storage)  # noqa: B008
+    file_id: str,
+    storage: AudioFileStorage = Depends(get_storage),  # noqa: B008
 ) -> AudioFileMetadata:
     record = storage.get(file_id)
     return AudioFileMetadata.from_record(record)

@@ -79,9 +79,7 @@ def test_get_after_normalize_reflects_persisted_metadata(monkeypatch, tmp_path) 
 def test_normalize_unknown_file_id_returns_404(monkeypatch, tmp_path) -> None:
     client = _client(monkeypatch, tmp_path)
 
-    response = client.post(
-        "/audio-files/11111111-1111-1111-1111-111111111111/normalize"
-    )
+    response = client.post("/audio-files/11111111-1111-1111-1111-111111111111/normalize")
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "not_found"

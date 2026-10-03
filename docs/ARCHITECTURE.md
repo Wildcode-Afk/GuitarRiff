@@ -7,7 +7,7 @@
 1. **Pipeline à sens unique.** Chaque étape consomme la sortie de la précédente et produit un artefact bien défini et sérialisable (fichier ou enregistrement en base).
 2. **`basic-pitch` est isolé.** Un seul module (`transcription/basic_pitch_adapter.py`) importe `basic_pitch`. Tout le reste du code dépend d'une interface `Transcriber` et d'un objet `NoteEvent`, pas de la bibliothèque elle-même. Cela permet de changer de moteur de transcription plus tard sans casser le reste.
 3. **`librosa` est un outil d'analyse, pas un moteur de transcription.** Il sert au prétraitement (rééchantillonnage), à la séparation harmonique/percussive et à l'estimation de tempo/battements — jamais présenté comme équivalent à `basic-pitch` pour détecter les notes.
-4. **`NoteEvent` est le contrat unique** entre la transcription et tout le reste (mapping vers le manche, génération de tablature, détection d'accords, export MIDI, frontend).
+4. **`Song` (et ses `Track`/`NoteEvent`/`RhythmEvent`) est le contrat unique** entre toute méthode de transcription et tout le reste (mapping vers le manche, génération de tablature, export MIDI, frontend). **Le frontend ne dépend jamais directement du format de sortie d'un modèle d'IA** : un `Song` sérialisé (`model_dump_json()`) est tout ce qu'il reçoit. Modèle implémenté à l'Étape 8 (voir § 6 ci-dessous pour le détail des unités et conventions).
 5. **Fonctions pures autant que possible** pour le mapping, la génération de tab et la détection d'accords : entrée de données, sortie de données, aucune E/S — testables sans fichier audio réel.
 6. **Aucun réseau dans les tests unitaires.** `yt-dlp` et `basic-pitch` sont simulés (mock/fake) à leur frontière ; les exécutions réelles sont marquées `slow`/`integration` et lancées à part.
 7. **Abstraction de l'entrée.** Un job accepte soit une URL YouTube, soit un fichier audio importé. L'import de fichier est implémenté en premier : plus simple techniquement et plus sûr juridiquement (voir `TECHNICAL_DECISIONS.md`, Q1).
@@ -58,7 +58,7 @@ Entrée (URL YouTube | fichier audio)
 [5] Analyse rythmique (librosa) ─► tempo, battements, mesures
         │
         ▼
-[6] Modèle musical commun (Piece: pistes + NoteEvent[] + métadonnées rythmiques)
+[6] Modèle musical commun (Song: pistes + NoteEvent[]/RhythmEvent[] + tempo/métrique)
         │
         ├──► [7a] Génération de tablature guitare/basse (mapping manche)
         ├──► [7b] Export MIDI
@@ -84,7 +84,7 @@ GuitarRiff/
 │   │   ├── separation/          # Demucs adapter
 │   │   ├── transcription/       # basic_pitch_adapter.py (seul point d'import)
 │   │   ├── rhythm/               # tempo/beat via librosa
-│   │   ├── model/                # NoteEvent, Piece, contrats Pydantic
+│   │   ├── model/                # Song, Track, NoteEvent, RhythmEvent (contrats Pydantic — voir § ci-dessous)
 │   │   ├── tablature/            # mapping notes → manche, génération tab
 │   │   ├── midi/                  # export/lecture MIDI
 │   │   ├── jobs/                  # file d'attente, statuts
@@ -102,3 +102,36 @@ GuitarRiff/
 - Acquisition audio YouTube : voir `TECHNICAL_DECISIONS.md`, Q1.
 - Nécessité réelle de Demucs pour le MVP (ou report en V2) : voir `FEATURE_MATRIX.md`.
 - Bibliothèque de rendu de tablature définitive (SVG maison vs `alphaTab`).
+
+## 6. Modèle musical commun (Song/Track/NoteEvent) — Étape 8
+
+Implémenté dans `backend/guitarriff/model/` sous forme de modèles Pydantic v2
+immuables (`model_config = ConfigDict(frozen=True)`) — cohérent avec le reste
+du projet (déjà basé sur Pydantic/pydantic-settings), avec validation et
+sérialisation JSON obtenues nativement, sans code manuel.
+
+### Unités et conventions temporelles
+
+| Donnée | Unité / convention |
+|---|---|
+| `NoteEvent.midi_pitch` | Hauteur MIDI standard (0-127, 60 = do central) |
+| `NoteEvent.start_seconds` / `duration_seconds` | Secondes depuis le début de l'audio — **pas** une position en mesure/temps |
+| `NoteEvent.velocity` | Vélocité MIDI standard (0-127) |
+| `NoteEvent.confidence` | Optionnel, `[0.0, 1.0]` — `None` si la méthode de transcription n'en fournit pas |
+| `TempoChange.bpm` | Battements **par noire**, quelle que soit la métrique active (convention MIDI/DAW standard, y compris en 6/8, 7/8, etc.) |
+| `TempoChange.time_seconds` / `TimeSignatureChange.time_seconds` | Toujours ancrés en secondes absolues, **jamais** par numéro de mesure (qui dépendrait circulairement de l'historique tempo/métrique) |
+| `MusicalPosition.bar` / `.beat` | Numérotés à partir de **1** (convention de notation musicale) ; `beat` est exprimé dans l'unité de la métrique active (ex. en 6/8 : 6 temps par mesure, pas 3) |
+| `Track.tuning` | Séquence de hauteurs MIDI des cordes à vide, de la plus grave à la plus aiguë |
+
+### Décisions de modélisation
+
+- **`MusicalPosition` est une donnée dérivée**, jamais la source de vérité : un `NoteEvent` fraîchement transcrit a `position = None` ; `Song.with_computed_positions()` (fonction pure) la calcule pour toutes les notes/événements à partir de `tempo_changes`/`time_signature_changes`.
+- **Les accords ne sont pas un objet dédié** : plusieurs `NoteEvent` dont les intervalles de temps se chevauchent, sur la même piste, constituent un accord. Le regroupement visuel est laissé à une étape de génération de tablature en aval.
+- **Les silences ne sont pas des objets explicites** : un intervalle de temps sans `NoteEvent` est déjà un silence valide — convention identique à MIDI/`basic-pitch`, qui ne représentent que des événements note-on/note-off.
+- **`RhythmEvent` (batterie) est distinct de `NoteEvent`** : un coup de batterie n'a pas de hauteur harmonique ; `RhythmEvent.drum_piece` utilise un vocabulaire contrôlé lisible (`DrumPiece`) plutôt qu'un numéro General MIDI Percussion brut. Sa `duration_seconds` peut valoir 0 (déclenchement instantané), contrairement à `NoteEvent` qui exige une durée strictement positive.
+- **`InstrumentKind` est aligné sur les noms de pistes de la séparation (Étape 7)** : `drums`, `bass`, `other`, `vocals`, `guitar`, `piano` correspondent directement aux clés de `InstrumentKind` (`other` et `mixture` se rejoignent sur `InstrumentKind.OTHER`) — une piste séparée devient directement une `Track` sans table de correspondance ad hoc. Vérifié par un test de compatibilité dédié (`test_model_compatibility.py`).
+- **Compatibilité multi-méthodes** : `confidence`, `instrument_info` et `tuning` sont tous optionnels — une méthode qui ne les fournit jamais (ex. import MIDI direct, sans confiance) produit des `Song` tout aussi valides qu'une méthode qui les fournit systématiquement (`basic-pitch`).
+
+### Sérialisation
+
+`Song.model_dump_json()` / `Song.model_validate_json(...)` (et leurs équivalents `model_dump`/`model_validate` pour un dict Python) sont le seul mécanisme de sérialisation — aucun code de conversion manuel. Les tuples (`notes`, `tracks`, `tempo_changes`, etc.) survivent au round-trip JSON grâce à la validation Pydantic native des types `tuple[X, ...]`.

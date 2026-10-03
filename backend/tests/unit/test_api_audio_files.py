@@ -19,9 +19,7 @@ def _client(monkeypatch, tmp_path, **env: str) -> TestClient:
 def test_upload_valid_wav_returns_metadata(monkeypatch, tmp_path) -> None:
     client = _client(monkeypatch, tmp_path)
 
-    response = client.post(
-        "/audio-files", files={"file": ("chanson.wav", VALID_WAV, "audio/wav")}
-    )
+    response = client.post("/audio-files", files={"file": ("chanson.wav", VALID_WAV, "audio/wav")})
 
     assert response.status_code == 201
     body = response.json()
@@ -46,9 +44,7 @@ def test_upload_rejects_oversized_file(monkeypatch, tmp_path) -> None:
     client = _client(monkeypatch, tmp_path, MAX_UPLOAD_SIZE_MB="1")
     oversized = VALID_WAV + b"\x00" * (2 * 1024 * 1024)
 
-    response = client.post(
-        "/audio-files", files={"file": ("big.wav", oversized, "audio/wav")}
-    )
+    response = client.post("/audio-files", files={"file": ("big.wav", oversized, "audio/wav")})
 
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "file_too_large"
@@ -70,9 +66,7 @@ def test_upload_path_traversal_filename_is_neutralized(monkeypatch, tmp_path) ->
 def test_get_then_delete_then_404(monkeypatch, tmp_path) -> None:
     client = _client(monkeypatch, tmp_path)
 
-    upload = client.post(
-        "/audio-files", files={"file": ("chanson.wav", VALID_WAV, "audio/wav")}
-    )
+    upload = client.post("/audio-files", files={"file": ("chanson.wav", VALID_WAV, "audio/wav")})
     file_id = upload.json()["file_id"]
 
     get_response = client.get(f"/audio-files/{file_id}")

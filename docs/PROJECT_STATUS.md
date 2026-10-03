@@ -1,6 +1,46 @@
 # GuitarRiff — État du projet
 
-## Étape 7 — Séparation d'instruments (terminée le 02/10/2026)
+## Étape 8 — Modèle musical commun (terminée le 03/10/2026)
+
+> Statut : **modèle de données central implémenté, validé, sérialisable — le contrat unique pour toute future méthode de transcription. Toujours aucune transcription réelle branchée.**
+
+### Ce qui a été ajouté
+
+| Élément | État |
+|---|---|
+| `model/song.py` | `Song` (racine) + `AudioMetadata` — valide que `tempo_changes`/`time_signature_changes` commencent à `time_seconds=0.0` et sont strictement croissants, identifiants de piste uniques |
+| `model/track.py` | `Track` + `TrackDisplaySettings` (couleur hexadécimale validée, clé, ordre d'affichage) |
+| `model/note_event.py` | `NoteEvent` + `InstrumentSpecificInfo` (corde/case, toujours optionnels) |
+| `model/rhythm_event.py` | `RhythmEvent` pour la batterie — vocabulaire contrôlé `DrumPiece`, durée nulle autorisée |
+| `model/tempo.py` | `TempoChange`, `TimeSignatureChange` — dénominateur validé comme puissance de 2 |
+| `model/position.py` | `MusicalPosition` + `compute_position` (fonction pure, gère changements de tempo et de métrique) |
+| `model/enums.py` | `InstrumentKind` (aligné sur les noms de pistes de la séparation, Étape 7), `Clef`, `DrumPiece` |
+| Tests | **95 nouveaux tests** — validation, immutabilité, sérialisation round-trip, calcul de position (scénarios vérifiés à la main), compatibilité multi-méthodes — backend à **250 tests au total** |
+| `docs/ARCHITECTURE.md` | Section 6 ajoutée (unités, conventions, décisions de modélisation) ; renommage `Piece` → `Song` dans le reste du document |
+
+### Vérifications réelles effectuées
+
+- `compute_position` vérifié par calcul manuel avant d'écrire les tests formels (ex. 120 BPM 4/4 : 1 mesure = 2.0s exactement ; changement de tempo à mi-mesure ; changement de métrique ; métrique composée 6/8).
+- Round-trip JSON complet d'un `Song` réaliste à 3 pistes (guitare avec accord, basse, batterie) avec changement de tempo — reconstruction strictement identique à l'original (`restored == song`).
+- Test de compatibilité avec deux formes de sortie différentes (façon `basic-pitch` avec confiance, façon import MIDI sans confiance) : les deux produisent des `Song` valides sans traitement spécial.
+- Test de cohérence croisée avec l'Étape 7 : chaque nom de piste de séparation (`drums`, `bass`, `other`, `vocals`, `guitar`, `piano`) a un `InstrumentKind` correspondant.
+
+### Écarts honnêtes
+
+- Ce modèle n'est pas encore branché à une vraie transcription : aucun `Song` n'est encore produit par l'application elle-même (prochaine étape).
+- Le calcul de position (`compute_position`) suppose que les changements de métrique interviennent sur une limite de mesure pour un résultat parfaitement intuitif ; si ce n'est pas le cas, l'algorithme reste déterministe mais le changement de taille de mesure s'applique au prorata, sans réalignement rétroactif.
+- `InstrumentSpecificInfo` (corde/case) n'est renseigné par rien à ce stade — en attente de l'étape de mapping manche.
+
+### Résultats d'exécution réels
+
+```
+Backend : uv run pytest        → 250 passed
+Backend : uv run ruff check .  → All checks passed!
+Backend : uv run mypy backend/guitarriff → Success: no issues found in 39 source files
+Frontend : npm run test        → 1 passed (inchangé)
+```
+
+## Historique — Étape 7 : séparation d'instruments (02/10/2026)
 
 > Statut : **module de séparation fonctionnel et testé (mocks), Demucs en dépendance optionnelle non installée dans cet environnement. Validation en conditions réelles encore à faire — voir écarts honnêtes.**
 

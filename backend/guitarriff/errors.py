@@ -192,9 +192,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(
-        _: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
         # On ne garde que loc/msg/type : les objets d'erreur Pydantic peuvent
         # embarquer des références internes qui n'ont rien à faire dans une
         # réponse HTTP.
