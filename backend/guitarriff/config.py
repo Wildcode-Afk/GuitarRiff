@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     separation_timeout_seconds: int = Field(default=900, ge=1)  # 15 min (CPU)
     separation_allow_model_download: bool = True
 
+    # Transcription (basic-pitch). Délai maximal avant qu'une transcription
+    # en cours soit signalée en timeout — voir transcription/service.py.
+    transcription_timeout_seconds: int = Field(default=300, ge=1)  # 5 min
+
     @field_validator("data_dir")
     @classmethod
     def _resolve_data_dir(cls, value: Path) -> Path:

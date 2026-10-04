@@ -12,6 +12,11 @@ dependencies = [
     "pydantic-settings>=2.4,<3.0",
     "python-multipart>=0.0.9,<1.0",
     "yt-dlp>=2025.1.1",
+    "basic-pitch[tf]>=0.3,<1.0",
+    # Pin nécessaire : resampy (dépendance de basic-pitch) importe encore
+    # pkg_resources, retiré des versions récentes de setuptools — vérifié
+    # par une installation réelle dès l'Étape 1 (voir docs/TECHNICAL_DECISIONS.md, D2).
+    "setuptools<81",
 ]
 
 [project.optional-dependencies]
@@ -40,7 +45,7 @@ packages = ["backend/guitarriff"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers -m \"not slow and not integration\""
 markers = [
     "slow: exécutions lentes ou nécessitant un vrai fichier audio (jamais en CI par défaut)",
     "integration: tests d'intégration (réseau, modèles réels, etc.)",

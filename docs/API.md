@@ -46,6 +46,7 @@ Avec `?verbose=true`, un champ `checks` est ajouté :
   "checks": {
     "data_dir_writable": true,
     "ffmpeg_available": true,
+    "basic_pitch_available": true,
     "separation": {
       "cpu_count": 4,
       "available_memory_mb": 3200,
@@ -363,6 +364,78 @@ pas partie des pistes du mode demandé.
 - **Aucun chemin construit depuis une entrée utilisateur** : le nom de piste
   demandé en téléchargement est vérifié contre la liste fixe des pistes du
   mode avant toute construction de chemin.
+
+### `POST /audio-files/{file_id}/transcribe`
+
+Transcrit les notes d'une source audio (basic-pitch) et les ajoute (ou
+remplace) la piste correspondante dans le `Song` persisté pour ce fichier.
+
+Corps de la requête :
+
+```json
+{ "instrument": "guitar", "source": "mixture" }
+```
+
+- `instrument` : **`guitar` ou `bass` uniquement** à ce stade (décision Q3,
+  voir `docs/FEATURE_MATRIX.md`) — détermine l'identifiant et le nom de la
+  piste créée. Une transcription répétée pour le même instrument **remplace**
+  la piste existante plutôt que d'en ajouter une seconde.
+- `source` : `"mixture"` (l'audio normalisé complet, Étape 6) ou le nom d'une
+  piste déjà séparée (ex. `"bass"`, `"guitar"`, `"other"` — Étape 7). **Préférer
+  une piste séparée au mélange complet améliore généralement nettement la
+  précision** quand plusieurs instruments sont présents (voir le champ
+  `notes` de la réponse, toujours rempli en conséquence). Quand plusieurs
+  modes de séparation ont été calculés pour le même nom de piste,
+  `htdemucs_6s` est recherché avant `htdemucs`.
+
+Réponse (`200`) :
+
+```json
+{
+  "song": { "...": "le Song complet, voir docs/ARCHITECTURE.md § 6" },
+  "track_id": "guitar",
+  "notes": "basic-pitch est un modèle de détection de hauteur polyvalent [...]"
+}
+```
+
+**Le champ `notes` est toujours présent et doit être affiché à
+l'utilisateur** : il rappelle que basic-pitch ne reconnaît jamais
+parfaitement un instrument, avec un message adapté selon la source utilisée
+(mélange complet vs piste séparée vs piste `other` non isolée). Voir
+`docs/MODELS.md` pour le détail des limites de transcription.
+
+Erreurs possibles :
+
+| Cas | Code HTTP | `error.code` |
+|---|---|---|
+| Instrument hors périmètre MVP (ni guitare ni basse) | 400 | `invalid_instrument_for_transcription` |
+| Fichier inconnu | 404 | `not_found` |
+| `source="mixture"` demandé sans normalisation préalable | 409 | `audio_not_normalized` |
+| Piste séparée demandée non encore calculée | 404 | `separated_stem_not_found` |
+| Délai de transcription dépassé | 504 | `transcription_timeout` |
+| Échec de transcription non attribuable à une cause ci-dessus | 500 | `transcription_failed` |
+
+**Jamais de faux résultat** : si basic-pitch échoue ou dépasse son délai, la
+requête échoue avec une erreur claire — aucune piste vide ou approximative
+n'est créée à sa place. Un audio sans note détectable (silence) n'est pas une
+erreur : la piste est créée avec `notes: []`, ce qui est le résultat honnête.
+
+### `GET /audio-files/{file_id}/song`
+
+Renvoie le `Song` déjà transcrit pour ce fichier (toutes les pistes
+transcrites jusqu'ici). `404` (`not_found`) si aucune transcription n'a
+encore été faite.
+
+### Sécurité et limites de la transcription
+
+- **Aucune commande système** : basic-pitch est appelé via son API Python
+  (`from basic_pitch.inference import predict`), jamais en ligne de commande.
+- **Chemin toujours interne** : la source transcrite est soit le fichier
+  normalisé (Étape 6), soit une piste déjà séparée (Étape 7) — jamais un
+  chemin construit à partir d'une chaîne utilisateur.
+- **Limite de temps honnête**, comme pour yt-dlp (Étape 5) et Demucs
+  (Étape 7) : `TRANSCRIPTION_TIMEOUT_SECONDS` borne l'attente côté appelant ;
+  le thread sous-jacent peut en théorie continuer quelques instants de plus.
 
 ## Format des erreurs
 

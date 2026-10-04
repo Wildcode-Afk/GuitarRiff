@@ -167,6 +167,43 @@ class InvalidSeparationModeError(AppError):
     error_code = "invalid_separation_mode"
 
 
+class TranscriptionError(AppError):
+    """Échec de transcription non attribuable à une cause déjà identifiée.
+    Le détail technique est journalisé côté serveur uniquement."""
+
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    error_code = "transcription_failed"
+
+
+class TranscriptionTimeoutError(AppError):
+    status_code = status.HTTP_504_GATEWAY_TIMEOUT
+    error_code = "transcription_timeout"
+
+
+class AudioNotNormalizedError(AppError):
+    """Transcription demandée sur le mélange complet (`source=mixture`) sans
+    normalisation préalable (voir Étape 6, `POST .../normalize`)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "audio_not_normalized"
+
+
+class SeparatedStemNotFoundError(AppError):
+    """La piste séparée demandée comme source n'a pas encore été calculée
+    (voir Étape 7, `POST .../separate`)."""
+
+    status_code = status.HTTP_404_NOT_FOUND
+    error_code = "separated_stem_not_found"
+
+
+class InvalidInstrumentForTranscriptionError(AppError):
+    """Instrument hors du périmètre MVP pour la transcription (décision Q3 —
+    guitare/basse uniquement, voir docs/FEATURE_MATRIX.md)."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "invalid_instrument_for_transcription"
+
+
 class InvalidFileIdError(AppError):
     """Identifiant de fichier syntaxiquement invalide (pas un UUID).
 

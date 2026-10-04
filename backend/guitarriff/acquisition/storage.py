@@ -33,10 +33,12 @@ from guitarriff.errors import (
     NotFoundError,
     UnsupportedFileTypeError,
 )
+from guitarriff.model import Song
 
 _META_FILENAME = "meta.json"
 _STORED_FILENAME_PREFIX = "source"
 _NORMALIZED_FILENAME = "normalized.wav"
+_SONG_FILENAME = "song.json"
 
 # Un nom de fichier d'origine ne sert qu'à l'affichage : on le limite en
 # longueur et on retire tout ce qui pourrait ressembler à un chemin ou à un
@@ -204,6 +206,27 @@ class AudioFileStorage:
 
         validated_id = _validate_file_id(file_id)
         return self._dir_for(validated_id) / "separated" / mode
+
+    def song_path(self, file_id: str) -> Path:
+        """Chemin du `Song` persisté pour ce fichier (Étape 9 — transcription).
+        N'implique pas qu'il existe déjà."""
+
+        validated_id = _validate_file_id(file_id)
+        return self._dir_for(validated_id) / _SONG_FILENAME
+
+    def read_song(self, file_id: str) -> Song | None:
+        """Renvoie le `Song` déjà transcrit pour ce fichier, ou `None` si
+        aucune transcription n'a encore été faite."""
+
+        path = self.song_path(file_id)
+        if not path.is_file():
+            return None
+        return Song.model_validate_json(path.read_text(encoding="utf-8"))
+
+    def write_song(self, file_id: str, song: Song) -> None:
+        path = self.song_path(file_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(song.model_dump_json(indent=2), encoding="utf-8")
 
     def update_metadata(self, file_id: str, **updates: object) -> StoredAudioFile:
         """Met à jour certains champs des métadonnées d'un fichier déjà

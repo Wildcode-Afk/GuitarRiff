@@ -1,14 +1,12 @@
 """Point d'entrée de l'API FastAPI.
 
-À ce stade (Étape 7), l'application expose : la vérification de démarrage
-(`/health`, avec capacités de séparation en mode `verbose`), la version
-(`/version`), l'import/consultation/suppression/normalisation de fichiers
-audio locaux (`/audio-files`), l'import audio depuis YouTube
-(`/youtube-imports`), la séparation d'instruments optionnelle
-(`/audio-files/{id}/separate`), une gestion d'erreurs cohérente et la
-configuration CORS pour le frontend. Aucune transcription n'existe encore :
-elle sera ajoutée derrière l'interface `Transcriber` décrite dans
-docs/ARCHITECTURE.md, une fois cette étape validée.
+À ce stade (Étape 9), l'application expose : la vérification de démarrage
+(`/health`), la version (`/version`), l'import/consultation/suppression/
+normalisation de fichiers audio locaux (`/audio-files`), l'import audio
+depuis YouTube (`/youtube-imports`), la séparation d'instruments optionnelle
+(`/audio-files/{id}/separate`), la transcription de notes via basic-pitch
+(`/audio-files/{id}/transcribe`, `/audio-files/{id}/song`), une gestion
+d'erreurs cohérente et la configuration CORS pour le frontend.
 """
 
 from __future__ import annotations
@@ -22,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from guitarriff.api.routes.audio_files import router as audio_files_router
 from guitarriff.api.routes.health import router as health_router
 from guitarriff.api.routes.separation import router as separation_router
+from guitarriff.api.routes.transcription import router as transcription_router
 from guitarriff.api.routes.version import router as version_router
 from guitarriff.api.routes.youtube_imports import router as youtube_imports_router
 from guitarriff.config import Settings, get_settings
@@ -31,11 +30,10 @@ from guitarriff.logging_config import configure_logging, get_logger
 logger = get_logger(__name__)
 
 API_DESCRIPTION = """
-API de GuitarRiff — socle serveur (Étape 7).
+API de GuitarRiff — socle serveur (Étape 9).
 
-Aucune fonctionnalité de transcription audio n'est encore exposée à ce
-stade. Voir `docs/API.md` pour le détail des routes disponibles et le
-format des erreurs.
+Voir `docs/API.md` pour le détail des routes disponibles, le format des
+erreurs, et les limites connues de la transcription (basic-pitch).
 """.strip()
 
 
@@ -80,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(audio_files_router)
     app.include_router(youtube_imports_router)
     app.include_router(separation_router)
+    app.include_router(transcription_router)
 
     return app
 

@@ -84,15 +84,29 @@ curl http://127.0.0.1:8000/audio-files/<file_id>/separate/htdemucs
 Voir `docs/API.md` pour le détail des routes et des erreurs, et
 `docs/MODELS.md` pour les modèles disponibles et leurs limites.
 
+Transcrire les notes d'un fichier déjà normalisé (basic-pitch — guitare ou
+basse uniquement, voir `docs/API.md`) :
+
+```bash
+curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/transcribe \
+  -H "Content-Type: application/json" -d '{"instrument": "guitar", "source": "mixture"}'
+curl http://127.0.0.1:8000/audio-files/<file_id>/song
+```
+
 ## Tests
 
 ```bash
 uv run pytest
 ```
 
-Les tests marqués `slow` ou `integration` (traitement audio réel, réseau) ne
-sont jamais exécutés par défaut — voir `pyproject.toml`, section
-`[tool.pytest.ini_options]`.
+Les tests marqués `slow` ou `integration` (traitement audio réel, réseau,
+modèle réel) ne sont **jamais exécutés par défaut** (voir `pyproject.toml`,
+`addopts`). Pour les lancer explicitement (ex. valider une vraie inférence
+basic-pitch) :
+
+```bash
+uv run pytest -m integration
+```
 
 ## Qualité de code
 
@@ -113,4 +127,4 @@ existent (pas encore de logique de transcription/tablature).
 - `docs/ARCHITECTURE.md` — architecture proposée et pipeline
 - `docs/FEATURE_MATRIX.md` — classement des fonctionnalités (MVP / V2 / expérimental)
 - `docs/TECHNICAL_DECISIONS.md` — décisions techniques justifiées et questions ouvertes
-- `docs/MODELS.md` — installation et licences des modèles de séparation d'instruments
+- `docs/MODELS.md` — basic-pitch (transcription) et Demucs (séparation) : installation, limites, licences

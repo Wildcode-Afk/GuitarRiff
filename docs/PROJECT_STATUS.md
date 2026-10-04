@@ -1,6 +1,57 @@
 # GuitarRiff — État du projet
 
-## Étape 8 — Modèle musical commun (terminée le 03/10/2026)
+## Étape 9 — Transcription des notes avec basic-pitch (terminée le 03/10/2026)
+
+> Statut : **première transcription réelle et fonctionnelle de bout en bout. basic-pitch installé pour de vrai (pas seulement vérifié), inférence réelle exécutée et vérifiée.**
+
+### Vérification préalable (avant implémentation, comme demandé)
+
+Confirmée par une **installation et une exécution réelles** dans l'environnement du projet (pas une relecture de l'audit de l'Étape 1) :
+
+- Python 3.11 requis (incompatible 3.12) — confirmé à nouveau.
+- `setuptools<81` nécessaire en complément de `basic-pitch[tf]` — confirmé à nouveau.
+- **Inférence réelle exécutée** : une sinusoïde à 440 Hz générée par FFmpeg produit bien une note détectée à la hauteur MIDI 69 (A4) — vérifié manuellement avant d'écrire les tests, puis couvert par un test d'intégration réel.
+- Audio silencieux → liste de notes vide (pas une erreur) — vérifié réellement.
+- Fichier inexistant → `FileNotFoundError` ; fichier audio corrompu → `EOFError` — ces deux comportements réels de basic-pitch ont guidé la conception de la gestion d'erreurs.
+
+### Ce qui a été ajouté
+
+| Élément | État |
+|---|---|
+| `transcription/basic_pitch_adapter.py` | **Seul point d'import de `basic_pitch`** (même principe d'isolation que Demucs). `basic-pitch[tf]` est désormais une dépendance **requise** du projet (pas optionnelle comme Demucs) — c'est le moteur du MVP |
+| `transcription/converter.py` | Conversion pure des notes brutes vers `NoteEvent` (modèle de l'Étape 8) ; `amplitude` → `velocity` MIDI + `confidence`, filtrage défensif des durées nulles/négatives |
+| `transcription/service.py` | Orchestration : résolution de la source (mélange normalisé ou piste séparée), limite de temps, mise à jour du `Song` persisté (remplacement par instrument, pas d'accumulation en double) |
+| `POST /audio-files/{id}/transcribe` | Nouvelle route — `instrument` limité à guitare/basse (décision Q3), `source` = mélange ou piste séparée |
+| `GET /audio-files/{id}/song` | Nouvelle route — le `Song` persisté, premier usage concret du contrat de l'Étape 8 |
+| `GET /health?verbose=true` | Ajoute `checks.basic_pitch_available` |
+| `pyproject.toml` | `addopts` corrigé pour **réellement** exclure `slow`/`integration` par défaut (déclarés depuis l'Étape 2 mais jamais appliqués faute de tests ainsi marqués jusqu'ici) |
+| `docs/MODELS.md` | Nouvelle section basic-pitch : vérification, limites de transcription à communiquer à l'utilisateur |
+| Tests | **38 nouveaux tests**, dont **3 tests d'intégration réels** (modèle basic-pitch réellement exécuté, exclus de la suite par défaut, lancés via `pytest -m integration`) — backend à **279 tests par défaut + 3 d'intégration** |
+
+### Respect des consignes de conformité
+
+- **Jamais de faux résultat** : un échec (timeout, erreur interne, fichier invalide) renvoie toujours une erreur claire, jamais une piste vide ou approximative substituée silencieusement.
+- **Limites honnêtement documentées** : `docs/MODELS.md` et le champ `notes` systématiquement renvoyé par l'API rappellent que basic-pitch ne reconnaît jamais parfaitement un instrument dans un mélange complet.
+- **Préférence pour les pistes séparées** : le paramètre `source` de `/transcribe` permet explicitement d'utiliser une piste déjà séparée (Étape 7) plutôt que le mélange complet, avec une recherche automatique `htdemucs_6s` puis `htdemucs` pour un nom de piste donné.
+
+### Écarts honnêtes
+
+- Comme pour yt-dlp et Demucs, le timeout de transcription est un timeout "honnête" (borne l'attente côté appelant via un thread, pas un arrêt forcé).
+- La transcription est synchrone (pas de progression exposée comme pour la séparation) : la tâche ne l'exigeait pas explicitement, et une inférence basic-pitch sur un extrait court reste nettement plus rapide qu'une séparation Demucs complète.
+- `instrument_info` (corde/case) des `NoteEvent` produits reste `None` : basic-pitch ne fournit que la hauteur, pas de mapping manche — toujours en attente d'une étape ultérieure.
+- Un bug préexistant a été corrigé au passage : les marqueurs pytest `slow`/`integration`, déclarés depuis l'Étape 2, n'étaient en réalité jamais appliqués (aucun `-m "not slow and not integration"` dans `addopts`) faute d'avoir eu, jusqu'à cette étape, des tests réellement marqués ainsi.
+
+### Résultats d'exécution réels
+
+```
+Backend : uv run pytest                → 279 passed, 3 deselected
+Backend : uv run pytest -m integration → 3 passed, 279 deselected
+Backend : uv run ruff check .          → All checks passed!
+Backend : uv run mypy backend/guitarriff → Success: no issues found in 43 source files
+Frontend : npm run test                → 1 passed (inchangé)
+```
+
+## Historique — Étape 8 : modèle musical commun (03/10/2026)
 
 > Statut : **modèle de données central implémenté, validé, sérialisable — le contrat unique pour toute future méthode de transcription. Toujours aucune transcription réelle branchée.**
 

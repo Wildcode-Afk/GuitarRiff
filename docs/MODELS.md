@@ -1,7 +1,50 @@
-# GuitarRiff — Modèles de séparation d'instruments
+# GuitarRiff — Modèles de transcription et de séparation
 
-> Concerne la fonctionnalité de séparation (Étape 7). Pour la transcription
-> (`basic-pitch`), voir `docs/ARCHITECTURE.md` et `docs/TECHNICAL_DECISIONS.md`.
+## basic-pitch (transcription de notes) — Étape 9
+
+### Vérification préalable
+
+| Critère | Constat |
+|---|---|
+| Compatibilité Python | **3.11 uniquement** — `tensorflow<2.15.1` exigé sous Linux, aucun wheel disponible pour 3.12 (vérifié dès l'Étape 1, confirmé à nouveau ici par une installation réelle) |
+| Dépendances | `setuptools<81` requis en complément (resampy importe encore `pkg_resources`, retiré des versions récentes) |
+| Plateforme | Testé sous Linux x86_64, CPU uniquement — non testé sur macOS/Windows |
+| Installation réelle | **Faite pour de vrai dans ce projet** (contrairement à Demucs) : `basic-pitch[tf]` est une dépendance **requise** (pas optionnelle) de `pyproject.toml`, car c'est le moteur de transcription central du MVP (décision Q3) |
+| Inférence réelle | Exécutée sur un fichier WAV généré (sinusoïde 440 Hz) : note détectée = hauteur MIDI 69 (A4), exactement la valeur attendue |
+
+### Limites de transcription — à communiquer à l'utilisateur, pas à cacher
+
+- **basic-pitch ne reconnaît jamais parfaitement un instrument dans un
+  mélange complet.** C'est un modèle de détection de hauteur généraliste, pas
+  spécialisé par instrument : sur un mix polyphonique (plusieurs instruments
+  simultanés), attendez-vous à des notes manquées, des notes fantômes
+  (surtout sur harmoniques/distorsion), et des hauteurs erronées sur les
+  passages denses.
+- **Préférer une piste déjà séparée (Étape 7) au mélange complet** quand
+  plusieurs instruments sont présents améliore généralement nettement la
+  précision — c'est pourquoi `POST /audio-files/{id}/transcribe` accepte un
+  paramètre `source` dédié (voir `docs/API.md`) et rappelle systématiquement
+  cette recommandation dans sa réponse.
+- **Un résultat vide (`notes: []`) est un résultat honnête**, pas une
+  erreur : vérifié réellement sur un audio silencieux. GuitarRiff ne fabrique
+  jamais de notes de substitution quand le modèle n'en détecte aucune, ni
+  quand il échoue (timeout, erreur interne) — l'appel échoue alors avec une
+  erreur claire plutôt que de renvoyer un faux résultat.
+- **`confidence` est dérivée de l'amplitude du modèle** (`[0.0, 1.0]`), pas
+  d'une mesure de confiance statistique au sens strict — c'est la seule
+  grandeur fournie par basic-pitch corrélée à la certitude de détection (voir
+  `transcription/converter.py`).
+- **Pensé pour les instruments mélodiques/harmoniques** (guitare, basse,
+  piano, voix) — pas pour la batterie, qui n'a pas de hauteur au sens
+  harmonique. C'est pourquoi la transcription est actuellement restreinte à
+  guitare/basse (décision Q3) plutôt que d'exposer un résultat de mauvaise
+  qualité sur d'autres instruments.
+
+---
+
+# Modèles de séparation d'instruments
+
+> Concerne la fonctionnalité de séparation (Étape 7).
 
 ## Vue d'ensemble
 
