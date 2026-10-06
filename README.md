@@ -81,6 +81,17 @@ curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/separate \
 curl http://127.0.0.1:8000/audio-files/<file_id>/separate/htdemucs
 ```
 
+Analyser le tempo et le rythme (librosa — ne détecte jamais la métrique, voir
+`docs/MODELS.md`), ou le corriger manuellement :
+
+```bash
+curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/analyze-rhythm
+curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/tempo \
+  -H "Content-Type: application/json" -d '{"bpm": 128.0}'
+curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/time-signature \
+  -H "Content-Type: application/json" -d '{"numerator": 3, "denominator": 4}'
+```
+
 Voir `docs/API.md` pour le détail des routes et des erreurs, et
 `docs/MODELS.md` pour les modèles disponibles et leurs limites.
 

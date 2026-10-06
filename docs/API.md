@@ -437,6 +437,59 @@ encore été faite.
   (Étape 7) : `TRANSCRIPTION_TIMEOUT_SECONDS` borne l'attente côté appelant ;
   le thread sous-jacent peut en théorie continuer quelques instants de plus.
 
+### `POST /audio-files/{file_id}/analyze-rhythm`
+
+Détecte tempo, battements et changements de tempo (librosa) et met à jour le
+`Song` persisté. **Ne détecte jamais la métrique** : applique une métrique
+4/4 par défaut (`confidence: null`, signifiant "hypothèse non analysée", pas
+"détectée") — sauf si une métrique manuelle a déjà été définie
+(`POST .../time-signature`), auquel cas elle est conservée. Remplace
+entièrement la carte de tempo précédente à chaque appel.
+
+Réponse (`200`) :
+
+```json
+{
+  "song": { "...": "Song mis à jour, voir docs/ARCHITECTURE.md § 6-7" },
+  "beat_times": [1.02, 1.53, 2.02, "..."],
+  "confidence": 0.95,
+  "notes": "Tempo et battements détectés automatiquement [...] métrique par défaut (4/4) appliquée [...]"
+}
+```
+
+`beat_times` (secondes) est une donnée **ponctuelle de cette réponse**, pas
+persistée dans `Song` (qui ne modélise le tempo que comme une fonction par
+morceaux — voir § 6) : à consommer immédiatement côté client si besoin
+(ex. afficher une grille de battements).
+
+Erreurs : `409` (`audio_not_normalized`) si l'audio n'est pas encore
+normalisé ; `422` (`no_rhythm_detected`) si aucun battement exploitable n'est
+détecté (silence, signal sans contenu rythmique — **jamais un tempo de
+substitution fabriqué à la place**) ; `504` (`rhythm_analysis_timeout`) ;
+`500` (`rhythm_analysis_failed`).
+
+### `POST /audio-files/{file_id}/tempo`
+
+Définit un tempo **manuellement** (`source: "manual"`, `confidence: null`),
+remplaçant toute carte de tempo existante par une valeur unique et constante.
+
+```json
+{ "bpm": 128.0 }
+```
+
+### `POST /audio-files/{file_id}/time-signature`
+
+Définit une métrique **manuellement**. `denominator` doit être une puissance
+de 2 (`422` sinon).
+
+```json
+{ "numerator": 6, "denominator": 8 }
+```
+
+Ces deux routes fonctionnent même sans transcription ni analyse préalable
+(elles créent un `Song` minimal si nécessaire) — seule la normalisation
+préalable (Étape 6) est requise.
+
 ## Format des erreurs
 
 Toutes les erreurs (validation, route inconnue, méthode non autorisée,

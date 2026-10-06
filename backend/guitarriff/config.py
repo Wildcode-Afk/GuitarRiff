@@ -97,6 +97,10 @@ class Settings(BaseSettings):
     # en cours soit signalée en timeout — voir transcription/service.py.
     transcription_timeout_seconds: int = Field(default=300, ge=1)  # 5 min
 
+    # Analyse rythmique (librosa). Plus légère que la transcription : délai
+    # par défaut plus court.
+    rhythm_analysis_timeout_seconds: int = Field(default=120, ge=1)
+
     @field_validator("data_dir")
     @classmethod
     def _resolve_data_dir(cls, value: Path) -> Path:

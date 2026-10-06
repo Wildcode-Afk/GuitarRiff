@@ -16,7 +16,7 @@ est le seul contrat exposé.
 
 from __future__ import annotations
 
-from guitarriff.model.enums import Clef, DrumPiece, InstrumentKind
+from guitarriff.model.enums import Clef, DrumPiece, EstimationSource, InstrumentKind
 from guitarriff.model.note_event import InstrumentSpecificInfo, NoteEvent
 from guitarriff.model.position import MusicalPosition, compute_position
 from guitarriff.model.rhythm_event import RhythmEvent
@@ -28,6 +28,7 @@ __all__ = [
     "AudioMetadata",
     "Clef",
     "DrumPiece",
+    "EstimationSource",
     "InstrumentKind",
     "InstrumentSpecificInfo",
     "MusicalPosition",

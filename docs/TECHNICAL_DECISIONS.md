@@ -46,6 +46,32 @@
 
 **Raison :** choix par défaut proposé faute de contrainte exprimée dans ce prompt ; cohérent avec un projet web moderne consommant une API typée. Ce choix n'a pas d'impact sur le contrat backend (`NoteEvent`) et peut être reconsidéré sans coût architectural.
 
+## D8 — `librosa` pour le tempo/battements, aucune détection de métrique (Étape 10)
+
+**Constat vérifié :** `librosa` (déjà une dépendance transitive de
+`basic-pitch`, aucun coût d'ajout) fournit une détection de tempo/battements
+robuste (`librosa.beat.beat_track`) mais **aucun détecteur de métrique
+fiable** intégré.
+
+**Bibliothèque alternative étudiée et écartée : `madmom`.** C'est la
+référence historique pour le suivi de "downbeat"/métrique, mais le paquet
+PyPI officiel (`CPJKU/madmom`) n'est plus maintenu depuis plusieurs années et
+s'installe difficilement sur des versions récentes de Python/NumPy (extensions
+Cython compilées, constat indépendant). Une réimplémentation plus récente
+(`madmom-infer`, 2026, pur NumPy/SciPy) existe et a été notée, mais reste un
+projet jeune et spécialisé ; son ajout n'a pas été jugé justifié pour cette
+étape.
+
+**Décision :** `librosa` pour tempo/battements/changements de tempo, avec une
+mesure de confiance dérivée de la cohérence du tempo local sur la durée du
+morceau (vérifiée empiriquement : ~1.0 sur un signal rythmique régulier, ~0.23
+sur du bruit blanc sans rythme). **Aucune détection de métrique** : une
+métrique par défaut (4/4) non confirmée (`confidence=None`) est appliquée tant
+que l'utilisateur ne la corrige pas manuellement — conformément à la consigne
+de ne pas déduire une métrique certaine d'une estimation incertaine. À
+revisiter si `madmom-infer` (ou un équivalent) gagne en maturité et qu'un
+besoin réel de détection de métrique se confirme.
+
 ---
 
 ## Questions ouvertes (nécessitent ta décision avant l'implémentation)

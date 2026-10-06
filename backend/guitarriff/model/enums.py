@@ -22,6 +22,15 @@ class InstrumentKind(StrEnum):
     OTHER = "other"
 
 
+class EstimationSource(StrEnum):
+    """Distingue une valeur estimée automatiquement (analyse audio) d'une
+    valeur fournie ou corrigée par l'utilisateur — voir `model/tempo.py` et
+    docs/ARCHITECTURE.md § 7 (Étape 10)."""
+
+    DETECTED = "detected"
+    MANUAL = "manual"
+
+
 class Clef(StrEnum):
     TREBLE = "treble"
     BASS = "bass"

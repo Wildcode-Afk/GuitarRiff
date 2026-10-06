@@ -135,3 +135,34 @@ sérialisation JSON obtenues nativement, sans code manuel.
 ### Sérialisation
 
 `Song.model_dump_json()` / `Song.model_validate_json(...)` (et leurs équivalents `model_dump`/`model_validate` pour un dict Python) sont le seul mécanisme de sérialisation — aucun code de conversion manuel. Les tuples (`notes`, `tracks`, `tempo_changes`, etc.) survivent au round-trip JSON grâce à la validation Pydantic native des types `tuple[X, ...]`.
+
+## 7. Analyse rythmique et distinction détecté/manuel — Étape 10
+
+`backend/guitarriff/rhythm/` : `analyzer.py` (seul point d'import de
+`librosa`) détecte tempo, battements et changements de tempo avec une mesure
+de confiance réelle ; `service.py` orchestre la mise à jour du `Song` déjà
+persisté par la transcription (Étape 9) ou en crée un si nécessaire.
+
+### `EstimationSource` — convention étendue au modèle commun (Étape 8)
+
+`TempoChange` et `TimeSignatureChange` (voir § 6) portent désormais chacun un
+champ `source: EstimationSource` (`DETECTED` ou `MANUAL`) et un champ
+`confidence` optionnel (toujours `None` pour une valeur `MANUAL` — validé par
+le modèle lui-même, pas seulement par convention). C'est la réponse directe à
+l'exigence de distinguer une valeur estimée automatiquement d'une valeur
+fournie ou corrigée par l'utilisateur : l'information vit dans le modèle, pas
+seulement dans la couche API.
+
+### Ce qui est détecté, ce qui est une convention par défaut
+
+- **Tempo et battements** : détectés avec une vraie confiance mesurée (voir
+  `docs/TECHNICAL_DECISIONS.md`, D8).
+- **Métrique** : **jamais détectée depuis l'audio** à ce stade (aucune
+  bibliothèque fiable retenue, voir D8). Une métrique 4/4 par défaut est
+  appliquée avec `confidence=None` — qui signifie explicitement "hypothèse
+  non analysée", pas "détectée avec une confiance nulle". Une correction
+  manuelle (`POST .../time-signature`) est toujours prioritaire et n'est
+  jamais écrasée par une nouvelle analyse automatique.
+- **Mesures (bar starts)** : jamais détectées indépendamment non plus —
+  dérivées de `compute_position` (§ 6) à partir du couple (tempo, métrique)
+  retenu. Aucune logique de calcul de mesure dupliquée dans le module rythme.

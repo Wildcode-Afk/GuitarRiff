@@ -204,6 +204,25 @@ class InvalidInstrumentForTranscriptionError(AppError):
     error_code = "invalid_instrument_for_transcription"
 
 
+class NoRhythmDetectedError(AppError):
+    """Aucun battement exploitable détecté (ex. silence complet, signal sans
+    contenu rythmique). Ne jamais fabriquer un tempo arbitraire à la place —
+    voir rhythm/analyzer.py."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    error_code = "no_rhythm_detected"
+
+
+class RhythmAnalysisError(AppError):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    error_code = "rhythm_analysis_failed"
+
+
+class RhythmAnalysisTimeoutError(AppError):
+    status_code = status.HTTP_504_GATEWAY_TIMEOUT
+    error_code = "rhythm_analysis_timeout"
+
+
 class InvalidFileIdError(AppError):
     """Identifiant de fichier syntaxiquement invalide (pas un UUID).
 

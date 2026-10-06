@@ -1,6 +1,60 @@
 # GuitarRiff — État du projet
 
-## Étape 9 — Transcription des notes avec basic-pitch (terminée le 03/10/2026)
+## Étape 10 — Analyse rythmique : tempo, battements, métrique (terminée le 04/10/2026)
+
+> Statut : **tempo et battements détectés réellement avec confiance mesurée. Métrique jamais déduite — convention 4/4 par défaut, corrections manuelles entièrement supportées et distinguées du détecté.**
+
+### Étude des bibliothèques (avant implémentation, comme demandé)
+
+| Bibliothèque | Constat |
+|---|---|
+| `librosa` (retenue) | Déjà installée (dépendance transitive de basic-pitch, aucun coût d'ajout). Détection tempo/battements robuste et bien établie. **Aucun détecteur de métrique fiable intégré.** |
+| `madmom` (écartée) | Référence historique pour le suivi de métrique/downbeat, mais paquet PyPI non maintenu depuis plusieurs années, extensions Cython compilées difficiles à installer sur Python/NumPy récents (constat indépendant) |
+| `madmom-infer` (notée, non retenue) | Réimplémentation 2026 pure NumPy/SciPy de madmom, maintenue — mais projet jeune et spécialisé ; ajout non jugé justifié pour cette étape (voir docs/TECHNICAL_DECISIONS.md, D8) |
+
+### Vérifications réelles effectuées (pas supposées)
+
+- Click track synthétique à 120 BPM → tempo détecté 117.5 BPM (écart ~2 %, caractéristique connue de l'algorithme sur un signal de clics purs, documentée).
+- Bruit blanc (aucun rythme réel) → confiance ~0.23, contre ~1.0 sur un signal rythmique régulier : la mesure de confiance distingue effectivement un vrai rythme d'un signal sans rythme.
+- Introduction silencieuse de 2s avant le contenu → tempo toujours détecté correctement, premier battement situé après le silence.
+- Signal à deux tempos connus (120 puis 90 BPM) → changement de tempo correctement détecté par analyse en fenêtres glissantes.
+- Silence complet → `beat_track` renvoie un tempo de 0.0 et aucun battement : traité explicitement comme "aucun rythme détecté" (`422 no_rhythm_detected`), jamais comme un tempo de substitution fabriqué.
+
+### Ce qui a été ajouté
+
+| Élément | État |
+|---|---|
+| `model/tempo.py` (extension Étape 8) | `TempoChange`/`TimeSignatureChange` portent désormais `source` (`EstimationSource.DETECTED`/`MANUAL`) et `confidence` — validé : `confidence` doit être `None` pour une valeur `MANUAL` |
+| `rhythm/analyzer.py` | Seul point d'import de `librosa` ; tempo, battements, confiance, segments de tempo (changements) |
+| `rhythm/service.py` | Orchestration : crée/met à jour le `Song` (réutilise la persistance de l'Étape 9), applique une métrique 4/4 par défaut non confirmée, préserve une métrique manuelle existante lors d'une ré-analyse |
+| `POST /audio-files/{id}/analyze-rhythm` | Détection automatique |
+| `POST /audio-files/{id}/tempo` | Correction manuelle du tempo |
+| `POST /audio-files/{id}/time-signature` | Correction manuelle de la métrique (dénominateur validé comme puissance de 2) |
+| Tests | **56 nouveaux tests**, avec exemples synthétiques à tempo/métrique connus et cas ambigus (silence, bruit blanc, signal trop court, introduction silencieuse) — backend à **307 tests par défaut + 3 d'intégration** |
+
+### Respect des consignes de conformité
+
+- **Jamais de métrique certaine déduite d'une estimation incertaine** : aucune détection de métrique n'est tentée ; la valeur par défaut porte `confidence: null`, explicitement distincte d'une détection à faible confiance.
+- **Détecté vs manuel toujours distingué** dans le modèle lui-même (`EstimationSource`), pas seulement documenté en prose.
+- **Introductions, silences, mesures incomplètes** gérés : testés explicitement (intro silencieuse, silence complet, signal court) ; les mesures incomplètes ne posent pas de problème structurel puisque `compute_position` (Étape 8) fonctionne pour n'importe quel instant, sans exiger une fin de morceau alignée sur une limite de mesure.
+- **Représentation temporelle cohérente avec le modèle commun** : `analyze-rhythm` produit directement des `TempoChange`/`TimeSignatureChange` du modèle de l'Étape 8, aucune structure parallèle.
+
+### Écarts honnêtes
+
+- Comme pour les étapes précédentes, le timeout est "honnête" (borne l'attente côté appelant via un thread).
+- La détection de changement de tempo utilise une analyse par fenêtres de 6 s avec un seuil de 8 % — un choix pragmatique vérifié empiriquement sur un cas à deux tempos connus, pas une méthode de pointe (ex. suivi de tempo dynamique échantillon par échantillon).
+- Les "mesures"/débuts de mesure ne sont jamais indépendamment détectés depuis l'audio (pas de downbeat tracker) — toujours dérivés du couple tempo/métrique retenu, qui peut lui-même reposer sur une métrique par défaut non confirmée.
+
+### Résultats d'exécution réels
+
+```
+Backend : uv run pytest                → 307 passed, 3 deselected
+Backend : uv run ruff check .          → All checks passed!
+Backend : uv run mypy backend/guitarriff → Success: no issues found in 46 source files
+Frontend : npm run test                → 1 passed (inchangé)
+```
+
+## Historique — Étape 9 : transcription des notes avec basic-pitch (03/10/2026)
 
 > Statut : **première transcription réelle et fonctionnelle de bout en bout. basic-pitch installé pour de vrai (pas seulement vérifié), inférence réelle exécutée et vérifiée.**
 
