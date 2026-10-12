@@ -1,6 +1,102 @@
 # GuitarRiff — État du projet
 
-## Étape 10 — Analyse rythmique : tempo, battements, métrique (terminée le 04/10/2026)
+## Étape 12 — Tablatures de basse (terminée le 08/10/2026)
+
+> Statut : **mapping basse (4/5/6 cordes), notes répétées et silences gérés, rendu ASCII lisible. Mapper partagé avec la guitare (non copié) ; comportement guitare inchangé.**
+
+### Ce qui a été ajouté
+
+| Élément | État |
+|---|---|
+| `tablature/profiles.py` | `MappingProfile` (accordage par défaut, poids de coût, règle de silence) ; `GUITAR_PROFILE` (identique à l'Étape 11) et `BASS_PROFILE` ; `profile_for(instrument)` |
+| `tablature/cost.py` | `CostWeights.string_change_weight` (0 par défaut → guitare inchangée), `string_center_after` ; `group_cost` accepte la corde de la note précédente |
+| `tablature/mapper.py` | Contexte de main enrichi (case + corde), `rest_reset_seconds` (oubli de la position après un silence), regroupement par **indices** (des notes identiques ne s'écrasent plus), `group_simultaneous_notes` public |
+| `tablature/fretboard.py` | Accordages `STANDARD_BASS_5_TUNING` (B E A D G) et `STANDARD_BASS_6_TUNING` (+ C) |
+| `tablature/render.py` | Rendu ASCII : cordes nommées d'après l'accordage, corde aiguë en haut, colonnes par note/accord, silences, barres de mesure, retour à la ligne, notes sans position comptées. Indépendant de l'instrument |
+| `model/track.py` | `Track.capo_fret` (défaut 0, rétrocompatible — testé avec un `Track` « ancien format ») |
+| `map-fretboard` | Choisit le profil selon `instrument` ; le message mentionne « bassiste » / « guitariste » |
+| `GET /audio-files/{id}/tablature` | Nouvelle route, lecture seule ; erreur `409 fretboard_not_mapped` si le mapping n'a pas été fait |
+| Tests | **71 nouveaux tests** (accordages 4/5/6 cordes et drop D, limites de cases, changements de position, séquences, répétitions, silences, notes impossibles, rendu exact, service, API) — backend à **435 tests par défaut + 3 d'intégration** |
+
+### Vérifications réelles effectuées (pas supposées)
+
+- **Le profil basse change réellement les résultats** : cas concret trouvé par recherche exhaustive sur les séquences de 3 notes — pour `33 37 39`, la basse garde la ligne sur la corde de la (cases 0, 4, 6) là où les poids guitare sautent à la corde de ré (case 1). 123 séquences (trois hauteurs distinctes entre 33 et 49) donnent un résultat différent.
+- **Mesure sur 300 lignes simulées** (graine fixe) : le profil basse déplace moins la main (2514 cases contre 2578) et change moins de corde (800 contre 834). Effet réel mais **modeste, et mesuré sur des données synthétiques**, pas sur de vraies lignes de basse.
+- **Un élément retiré parce qu'inutile** : j'avais prototypé un bonus de répétition (rejouer une note identique à la même position). Mesuré sur 4000 séquences aléatoires avec répétitions : **aucun résultat modifié**, et les notes répétées ne bougeaient déjà jamais sans lui. Retiré plutôt que gardé comme code mort ; la propriété « une note répétée ne change jamais de position » est testée à la place (500 séquences aléatoires).
+- **Test par mutation** : en désactivant la règle de silence, les deux tests de silence concernés échouent (et passent à nouveau une fois la règle restaurée) — ils ne sont donc pas vides.
+- **Scénario de silence vérifié** : après une note en case 9, une note aux candidats cases 13/8/3 reste en case 8 si le silence est de 0,2 s, mais passe en case 3 après 3 s.
+- **Deux de mes attentes de test étaient fausses, pas le code** : j'avais oublié que des colonnes vides s'insèrent pour les silences d'au moins un temps, et qu'une barre de mesure s'insère entre deux notes de mesures différentes (4/4 à 120 BPM = 2 s par mesure). Attentes corrigées après avoir lu le détail des échecs.
+
+### Respect des consignes
+
+- **Pas de copie aveugle** : un seul mapper, des profils ; les 57 tests de guitare de l'Étape 11 passent inchangés.
+- **Notes impossibles détectées** : hauteur sous la corde la plus grave (ex. B0 sur 4 cordes, jouable sur 5), plus de notes simultanées que de cordes — signalées avec leur raison, et comptées dans le rendu.
+- **Ne prétend pas reconstituer le jeu d'un bassiste** : rappelé dans `notes` de chaque réponse.
+
+### Écarts honnêtes
+
+- **Poids du profil basse = jugement heuristique**, jamais validé contre de vraies lignes de basse (aucun corpus utilisé) ; documenté comme tel dans `profiles.py` et `docs/ARCHITECTURE.md` § 9.
+- **Le rendu ne représente pas les durées** (pas de notation rythmique) ; la durée d'un temps vient du *premier* tempo du `Song`, un changement de tempo ultérieur n'est donc pas répercuté sur l'espacement des silences ; un silence qui chevauche une barre de mesure est dessiné avant cette barre.
+- **Seuil de silence (1 s) fixe**, indépendant du tempo : un choix pragmatique, pas une durée musicale.
+- Les barres de mesure ne sont aussi fiables que la carte de tempo/métrique du `Song` (métrique 4/4 par défaut non confirmée tant que l'utilisateur ne la corrige pas, Étape 10).
+- Le mapping n'est toujours pas rejoué automatiquement après une nouvelle transcription.
+- Le rendu des mêmes notes n'a été validé visuellement que sur quelques exemples (dont celui de `docs/API.md`), pas sur de longues transcriptions réelles.
+
+### Résultats d'exécution réels
+
+```
+Backend : uv run pytest                → 435 passed, 3 deselected
+Backend : uv run ruff check .          → All checks passed!
+Backend : uv run mypy backend/guitarriff → Success: no issues found in 53 source files
+```
+
+## Historique — Étape 11 : génération des tablatures de guitare (06/10/2026)
+
+> Statut : **conversion notes → positions (corde, case) fonctionnelle, avec fonction de coût réelle (pas "première position valide"). Ne prétend pas reconstituer le doigté original du guitariste.**
+
+### Ce qui a été ajouté
+
+| Élément | État |
+|---|---|
+| `tablature/fretboard.py` | `FretboardConfig` (accordage, capodastre, limite de cases) et génération des positions candidates ; nombre de cordes = longueur du tuning fourni (guitare 6/7 cordes, basse 4/5, accordages alternatifs) |
+| `tablature/cost.py` | Fonction de coût : déplacement par rapport à la position précédente, écart entre les doigts (accords), jouabilité générale, bonus corde à vide — heuristique documentée, poids ajustables |
+| `tablature/mapper.py` | Groupement des notes simultanées (tolérance 50 ms), résolution exhaustive sous contrainte de cordes distinctes, signalement explicite des notes impossibles |
+| `tablature/service.py` | Orchestration sur le `Song` persisté (Étape 9), remplit `instrument_info` et `Track.tuning` |
+| `POST /audio-files/{id}/map-fretboard` | Nouvelle route — `instrument`, `tuning`, `capo_fret`, `max_fret` configurables |
+| `NoteEvent.with_instrument_info` | Ajout symétrique de `with_position` (Étape 8) — aucun changement du modèle commun lui-même, `instrument_info` existait déjà (optionnel) |
+| Tests | **57 nouveaux tests** : notes simples, accords, changements de position, accordages différents (basse, drop D, 7 cordes), capodastre, notes impossibles — backend à **364 tests par défaut + 3 d'intégration** |
+
+### Vérifications réelles effectuées avant d'écrire les tests (pas supposées)
+
+- **Note simple** (A4/440 Hz, MIDI 69) : plusieurs positions valides sur 5 cordes ; la corde aiguë, case 5, est choisie plutôt que la première trouvée (corde grave, case 24) — la fonction de coût a bien un effet.
+- **Accord power chord** (MIDI 40+47) : corde à vide basse + case 2 de la corde suivante — voicing que choisirait naturellement un guitariste.
+- **Capodastre** : j'ai d'abord écrit à tort un test où un capodastre rendait une note plus grave jouable ; l'exécution réelle a montré l'inverse (un capodastre *élève* la hauteur minimale atteignable). Test corrigé, comportement du code correct dès le départ.
+- **Cohérence de déplacement** : recherche programmatique d'un cas où la meilleure position n'est pas la plus basse — trouvé (pitch 52, références 7.0) et converti en test : la case 7 (déplacement nul) l'emporte sur la case 2.
+- **Basse 4 cordes, accord de 5 notes** : les 5 notes sont signalées comme impossibles, avec la raison, plutôt que d'en garder 4 arbitraires.
+
+### Respect des consignes de conformité
+
+- **Pas de "première position valide"** : testé explicitement (`test_does_not_always_pick_the_first_candidate_string`, `test_sequence_prefers_staying_near_previous_position`).
+- **Ne prétend pas reconstituer le doigté original** : documenté dans `docs/ARCHITECTURE.md` § 8 et rappelé dans le champ `notes` de chaque réponse API.
+- **Notes impossibles signalées, jamais ignorées silencieusement** : elles restent dans la piste avec `instrument_info: null` et leur raison est listée.
+
+### Écarts honnêtes
+
+- **Les poids de la fonction de coût sont un jugement heuristique**, pas des constantes dérivées objectivement — documenté comme tel, mais jamais validé contre des doigtés de guitaristes réels (aucun jeu de données de référence n'a été utilisé).
+- **Les accords sont regroupés par proximité temporelle des débuts de note (50 ms)** : deux notes d'un même accord qui seraient transcrites avec un écart supérieur seraient traitées comme séparées, et inversement.
+- **La position de référence de la main est une moyenne simple des cases pressées** — simplification volontaire, pas un modèle biomécanique de la main.
+- Le mapping n'est pas rejoué automatiquement quand une transcription est refaite : à relancer explicitement après chaque nouvelle transcription.
+
+### Résultats d'exécution réels
+
+```
+Backend : uv run pytest                → 364 passed, 3 deselected
+Backend : uv run ruff check .          → All checks passed!
+Backend : uv run mypy backend/guitarriff → Success: no issues found in 51 source files
+Frontend : npm run test                → 1 passed (inchangé)
+```
+
+## Historique — Étape 10 : analyse rythmique (04/10/2026)
 
 > Statut : **tempo et battements détectés réellement avec confiance mesurée. Métrique jamais déduite — convention 4/4 par défaut, corrections manuelles entièrement supportées et distinguées du détecté.**
 

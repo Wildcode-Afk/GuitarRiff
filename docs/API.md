@@ -490,6 +490,134 @@ Ces deux routes fonctionnent même sans transcription ni analyse préalable
 (elles créent un `Song` minimal si nécessaire) — seule la normalisation
 préalable (Étape 6) est requise.
 
+### `POST /audio-files/{file_id}/map-fretboard`
+
+Convertit les notes transcrites d'une piste de guitare ou de basse en
+positions (corde, case), et met à jour le `Song` persisté : chaque
+`NoteEvent` placé reçoit son `instrument_info` (`string_index`, `fret`), et la
+piste reçoit son `tuning`.
+
+```json
+{
+  "instrument": "guitar",
+  "tuning": [40, 45, 50, 55, 59, 64],
+  "capo_fret": 0,
+  "max_fret": 24
+}
+```
+
+- `instrument` : `guitar` ou `bass` uniquement (décision Q3).
+- `tuning` *(optionnel)* : hauteurs MIDI des cordes à vide, de la plus grave
+  à la plus aiguë. Le nombre de cordes est celui de la séquence fournie (une
+  guitare 7 cordes, une basse 5 cordes, etc. sont supportées). Défaut :
+  accordage standard de l'instrument (guitare E A D G B E, basse E A D G).
+- `capo_fret` : position du capodastre. **`fret` dans la réponse est
+  toujours relatif au capodastre** (case 0 = corde à vide avec le capodastre
+  en place), conformément à la façon dont une tablature se lit avec un
+  capodastre.
+- `max_fret` : case maximale absolue du manche (24 par défaut).
+
+Réponse (`200`) :
+
+```json
+{
+  "song": { "...": "Song mis à jour" },
+  "placed_count": 41,
+  "unplaced_count": 2,
+  "unplaced_reasons": ["Hauteur MIDI 28 hors de portée de cet accordage [...]"],
+  "notes": "Positions choisies par une fonction de coût [...] ne reconstitue pas le doigté original du guitariste [...]"
+}
+```
+
+**Les notes impossibles à placer ne sont jamais ignorées silencieusement** :
+elles restent dans la piste avec `instrument_info: null`, et chaque raison
+est listée dans `unplaced_reasons` (hauteur hors de portée de l'accordage /
+capodastre / limite de cases, ou plus de notes simultanées que de cordes —
+auquel cas tout le groupe est signalé plutôt que de choisir arbitrairement
+quelles notes garder).
+
+**Ne reconstitue pas le doigté original du guitariste** : le choix parmi
+plusieurs positions valides repose sur une fonction de coût heuristique
+(déplacement par rapport à la note précédente, écart entre les doigts pour un
+accord, jouabilité générale) — voir `docs/ARCHITECTURE.md` § 8. C'est *une*
+position jouable et cohérente, pas nécessairement celle qu'un guitariste donné
+aurait réellement utilisée, ce qui ne peut pas se déduire de l'audio seul.
+
+Erreurs : `400` (`invalid_instrument_for_fretboard_mapping`),
+`404` (`not_found` — aucune transcription pour ce fichier, ou aucune piste
+de cet instrument), `422` (`validation_error` — ex. `capo_fret > max_fret`,
+accordage invalide).
+
+#### Profil basse (Étape 12)
+
+`map-fretboard` choisit automatiquement le **profil de l'instrument**
+(`tablature/profiles.py`) : même mapper que la guitare, mais d'autres poids de
+coût et une règle de silence. Pour `instrument: "bass"` :
+
+- accordage par défaut E A D G ; **basses 5 et 6 cordes** supportées en
+  fournissant `tuning` (ex. `[23, 28, 33, 38, 43]` pour B E A D G) ;
+- déplacement, écartement des doigts et **changement de corde** plus pénalisés
+  qu'à la guitare (cases plus larges, cordes plus espacées) ;
+- **silences** : si l'écart entre la fin d'une note et le début de la
+  suivante atteint 1 s, la position de la main est oubliée (le bassiste a eu le
+  temps de se repositionner) ;
+- les notes répétées restent exactement à la même position.
+
+Ces poids sont un jugement heuristique, **non validé contre de vraies lignes de
+basse** (voir `docs/ARCHITECTURE.md` § 9). Le comportement guitare est inchangé.
+
+### `GET /audio-files/{file_id}/tablature?instrument=bass&max_width=80`
+
+Rend en texte la piste **déjà mappée** (`POST .../map-fretboard` d'abord) d'un
+instrument (`guitar` ou `bass`). Lecture seule : le `Song` persisté n'est pas
+modifié.
+
+```json
+{
+  "instrument": "bass",
+  "text": "...",
+  "placed_count": 6,
+  "unplaced_count": 1,
+  "notes": "Positions choisies par une fonction de coût [...] ne reconstitue pas le doigté original du bassiste [...]"
+}
+```
+
+Contenu réel de `text` pour la ligne `28 28 31 33`, un silence de 2 s, puis
+`38 40` et une note hors de portée, sortie observée en appelant le rendu avec un temps de
+0,5 s **sans positions de mesure** (via l'API, des barres `|` s'ajoutent aux changements de
+mesure du `Song`) :
+
+```
+Basse — accordage E A D G
+
+G|------------------------------|
+D|-------------------------0--2-|
+A|----------0-------------------|
+E|-0--0--3----------------------|
+
+(1 note(s) sans position : hors de portée de l'accordage ou accord trop fourni — non affichée(s))
+```
+
+- `max_width` (20 à 240, défaut 80) : la tablature passe à la ligne au-delà.
+- Corde la plus aiguë en haut ; une colonne par note ou accord, dans l'ordre.
+- **Les numéros de case sont relatifs au capodastre**, rappelé dans l'en-tête
+  quand il est utilisé.
+- **Silences** : un silence d'au moins un temps (durée d'un temps déduite du
+  premier tempo du `Song`) ajoute des colonnes vides (6 au plus).
+- **Mesures** : une barre `|` apparaît à chaque changement de mesure, calculée
+  à partir de la carte de tempo/métrique du `Song` (donc aussi fiable que
+  celle-ci — voir `analyze-rhythm`).
+- **Ce rendu ne représente pas les durées** : la largeur d'une colonne ne
+  dépend pas de la durée de la note, et aucune notation rythmique n'est
+  produite.
+- Les notes sans position (hors de portée, accord trop fourni) **ne sont pas
+  affichées** mais comptées (`unplaced_count`) et signalées en bas du texte.
+
+Erreurs : `400` (`invalid_instrument_for_fretboard_mapping`), `404`
+(`not_found` — aucune transcription ou aucune piste de cet instrument), `409`
+(`fretboard_not_mapped`), `422` (`validation_error` — ex. `max_width` hors
+bornes, `instrument` manquant).
+
 ## Format des erreurs
 
 Toutes les erreurs (validation, route inconnue, méthode non autorisée,

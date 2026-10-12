@@ -223,6 +223,22 @@ class RhythmAnalysisTimeoutError(AppError):
     error_code = "rhythm_analysis_timeout"
 
 
+class InvalidInstrumentForFretboardMappingError(AppError):
+    """Le mapping manche (corde/case) n'a de sens que pour un instrument à
+    cordes frettées. Décision Q3 (guitare/basse) reprise ici aussi."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "invalid_instrument_for_fretboard_mapping"
+
+
+class FretboardNotMappedError(AppError):
+    """Rendu de tablature demandé alors que la piste n'a pas encore été
+    mappée sur le manche (`POST .../map-fretboard`)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "fretboard_not_mapped"
+
+
 class InvalidFileIdError(AppError):
     """Identifiant de fichier syntaxiquement invalide (pas un UUID).
 

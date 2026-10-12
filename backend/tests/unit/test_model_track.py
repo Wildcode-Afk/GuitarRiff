@@ -69,3 +69,31 @@ def test_track_is_frozen() -> None:
     track = Track(id="t1", instrument=InstrumentKind.GUITAR, name="Guitare")
     with pytest.raises(ValidationError):
         track.name = "Autre nom"
+
+
+def test_capo_fret_defaults_to_zero() -> None:
+    track = Track(id="t1", instrument=InstrumentKind.BASS, name="Basse")
+    assert track.capo_fret == 0
+
+
+def test_capo_fret_rejects_negative_values() -> None:
+    with pytest.raises(ValidationError):
+        Track(id="t1", instrument=InstrumentKind.BASS, name="Basse", capo_fret=-1)
+
+
+def test_capo_fret_survives_serialization_round_trip() -> None:
+    track = Track(id="t1", instrument=InstrumentKind.GUITAR, name="Guitare", capo_fret=3)
+    assert Track.model_validate_json(track.model_dump_json()).capo_fret == 3
+
+
+def test_song_data_saved_before_capo_fret_existed_still_loads() -> None:
+    """Rétrocompatibilité : un Track persisté avant l'Étape 12 (sans capo_fret)
+    doit toujours se charger, avec un capodastre à 0."""
+
+    legacy = {
+        "id": "t1",
+        "instrument": "guitar",
+        "name": "Guitare",
+        "tuning": [40, 45, 50, 55, 59, 64],
+    }
+    assert Track.model_validate(legacy).capo_fret == 0

@@ -92,6 +92,24 @@ curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/time-signature \
   -H "Content-Type: application/json" -d '{"numerator": 3, "denominator": 4}'
 ```
 
+Convertir les notes transcrites en positions de cordes et de cases
+(accordage, capodastre et limite de cases configurables) :
+
+```bash
+curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/map-fretboard \
+  -H "Content-Type: application/json" \
+  -d '{"instrument": "guitar", "capo_fret": 2}'
+```
+
+Pour une basse (4, 5 ou 6 cordes selon `tuning`), puis obtenir la tablature
+lisible :
+
+```bash
+curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/map-fretboard \
+  -H "Content-Type: application/json" -d '{"instrument": "bass"}'
+curl "http://127.0.0.1:8000/audio-files/<file_id>/tablature?instrument=bass"
+```
+
 Voir `docs/API.md` pour le détail des routes et des erreurs, et
 `docs/MODELS.md` pour les modèles disponibles et leurs limites.
 

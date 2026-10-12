@@ -45,6 +45,10 @@ class Track(BaseModel):
     instrument: InstrumentKind
     name: str = Field(min_length=1)
     tuning: tuple[int, ...] | None = None
+    # Position du capodastre ayant servi au mapping manche (Étape 11/12) : les
+    # `fret` de `InstrumentSpecificInfo` sont relatifs à celui-ci, il faut donc
+    # le conserver pour pouvoir relire/afficher la tablature correctement.
+    capo_fret: int = Field(default=0, ge=0)
     notes: tuple[NoteEvent, ...] = ()
     rhythm_events: tuple[RhythmEvent, ...] = ()
     display: TrackDisplaySettings = Field(default_factory=TrackDisplaySettings)

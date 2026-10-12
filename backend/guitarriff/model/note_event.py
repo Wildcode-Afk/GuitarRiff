@@ -93,3 +93,9 @@ class NoteEvent(BaseModel):
         l'instance d'origine n'est jamais modifiée (modèle immuable)."""
 
         return self.model_copy(update={"position": position})
+
+    def with_instrument_info(self, instrument_info: InstrumentSpecificInfo) -> NoteEvent:
+        """Renvoie une copie avec `instrument_info` renseignée (ex. corde et
+        case, voir `tablature/mapper.py`) — fonction pure."""
+
+        return self.model_copy(update={"instrument_info": instrument_info})

@@ -166,3 +166,125 @@ seulement dans la couche API.
 - **Mesures (bar starts)** : jamais détectées indépendamment non plus —
   dérivées de `compute_position` (§ 6) à partir du couple (tempo, métrique)
   retenu. Aucune logique de calcul de mesure dupliquée dans le module rythme.
+
+## 8. Mapping manche (corde/case) — Étape 11
+
+`backend/guitarriff/tablature/` remplit `NoteEvent.instrument_info` (champ
+optionnel prévu dès l'Étape 8) : aucune modification du modèle commun n'a été
+nécessaire, seulement un ajout symétrique de `NoteEvent.with_instrument_info`.
+
+### Génération des positions candidates
+
+Pour une hauteur MIDI `P`, toutes les cordes sont parcourues ; une position est
+valide si `0 <= P - tuning[corde] - capo_fret <= max_fret - capo_fret`. Le
+nombre de cordes est celui de `tuning` (aucune valeur codée en dur : guitare 6
+ou 7 cordes, basse 4 ou 5 cordes, accordages alternatifs, etc.). Voir
+`tablature/fretboard.py`.
+
+### Sélection : fonction de coût, pas "première position valide"
+
+`tablature/cost.py` combine quatre composantes, détaillées et justifiées dans
+son docstring :
+
+| Composante | Poids par défaut | Rôle |
+|---|---|---|
+| Déplacement | 1.0 par case | Distance à la position de main issue de la note/l'accord précédent (une corde à vide ne coûte rien : aucun doigt requis) |
+| Écart entre les doigts (accord) | 2.0 par case | Plus pénalisant que le déplacement simple — un étirement est plus difficile qu'un changement de position |
+| Jouabilité générale | 0.3 par case | Léger biais vers les cases basses |
+| Bonus corde à vide | -0.5 | Une corde à vide est toujours plus facile à jouer |
+
+**Ces poids sont un jugement heuristique de jouabilité, pas des constantes
+dérivées objectivement** (contrairement par exemple à la fréquence
+d'échantillonnage de l'Étape 6, justifiée par une contrainte vérifiable de
+`basic-pitch`) : documentés comme tels, ajustables via `CostWeights`. **Le but
+n'est pas de reconstituer le doigté réel du guitariste original** — ce qui est
+impossible à déduire du seul audio — mais de produire une position jouable
+cohérente avec ce qui précède.
+
+Vérifié sur un cas réel : après une note en case 7, une note aux candidats
+cases 2/7/12 reste en case 7 (déplacement nul) plutôt que de sauter à la case 2
+pourtant plus basse en valeur absolue — preuve que la fonction de coût
+l'emporte bien sur un simple "premier/plus bas candidat".
+
+### Notes simultanées (accords)
+
+`tablature/mapper.py` regroupe les notes dont les débuts diffèrent de moins de
+50 ms (`CHORD_TOLERANCE_SECONDS` — une transcription audio réelle ne produit
+presque jamais des `start_seconds` rigoureusement identiques pour les notes
+d'un même accord) et résout le groupe par recherche exhaustive sous la
+contrainte *une corde ne porte qu'une note à la fois*. La recherche exhaustive
+reste largement praticable (accords de quelques notes, au plus
+`n_strings` candidats par note).
+
+### Notes impossibles à placer
+
+Deux cas, tous deux signalés explicitement (`UnplacedNote.reason`) :
+hauteur hors de portée (accordage/capodastre/limite de cases), ou plus de notes
+simultanées jouables que de cordes disponibles (tout le groupe est alors
+signalé, pas une sélection arbitraire).
+
+## 9. Tablature de basse et rendu lisible — Étape 12
+
+### Un mapper partagé, des profils par instrument
+
+Plutôt que de copier le module guitare, la basse réutilise le même mapper
+(`tablature/mapper.py`) paramétré par un **profil** (`tablature/profiles.py`) :
+accordage par défaut, poids de la fonction de coût, durée de silence après
+laquelle la position de la main est oubliée. `profile_for(instrument)` renvoie
+`None` hors guitare/basse (décision Q3). Le profil guitare reproduit à
+l'identique le comportement de l'Étape 11 (les 57 tests de cette étape passent
+inchangés).
+
+Ce qui est propre à la basse :
+
+| Élément | Guitare | Basse | Raison |
+|---|---|---|---|
+| Déplacement (par case) | 1.0 | 1.5 | Cases plus larges, ligne quasi monophonique |
+| Écart entre doigts (par case) | 2.0 | 3.0 | Un même écart est un étirement plus difficile |
+| Jouabilité générale (par case) | 0.3 | 0.2 | Les cases hautes sont d'usage courant à la basse |
+| Changement de corde (par corde) | 0 | 0.8 | Cordes très espacées, geste plus coûteux |
+| Oubli de la position après silence | jamais | ≥ 1 s | Le bassiste a le temps de se repositionner |
+
+**Ces valeurs sont un jugement heuristique, non validé contre de vraies lignes
+de basse.** Mesure sur 300 lignes *simulées* (marche aléatoire de petits
+intervalles, graine fixe) : le profil basse déplace moins la main (2514 cases
+contre 2578) et change moins de corde (800 contre 834) que les poids guitare —
+un effet réel mais modeste, sur des données synthétiques.
+
+### Notes répétées, silences
+
+- **Notes répétées** : le contexte de la note précédente (case de référence,
+  corde moyenne) est conservé ; une note répétée reste exactement à la même
+  position — propriété vérifiée sur 500 séquences aléatoires. Un bonus de
+  répétition explicite a été **prototypé puis retiré** : sur 4000 séquences il
+  ne changeait aucun résultat (le déplacement et le changement de corde
+  suffisent), le garder aurait été du code mort.
+- **Silences** : un silence n'est pas un objet du modèle (voir § 6) mais
+  l'écart entre la fin d'un groupe et le début du suivant. Le seuil est
+  inclusif (`≥ rest_reset_seconds`). Un test par mutation (règle désactivée)
+  a confirmé que les tests de silence échouent bien sans elle.
+- Le regroupement des notes simultanées travaille désormais sur des **indices**
+  et non sur l'identité des objets, pour que des notes identiques ne
+  s'écrasent pas.
+
+### Extension du modèle commun : `Track.capo_fret`
+
+Les numéros de case sont relatifs au capodastre ; pour relire ou afficher une
+tablature il faut donc connaître celui-ci. `Track` porte désormais
+`capo_fret` (défaut 0, rétrocompatible : un `Song` persisté avant cette étape
+se charge toujours — testé).
+
+### Rendu ASCII (`tablature/render.py`)
+
+Fonction pure, **indépendante de l'instrument** (sert aussi la guitare), nombre
+de cordes quelconque. Corde aiguë en haut, noms de cordes déduits de
+l'accordage (`E A D G B e`), une colonne par note ou accord, retour à la ligne
+selon `max_width`, barres de mesure issues des `MusicalPosition` (§ 6), colonnes
+vides pour les silences d'au moins un temps (6 au plus).
+
+**Limites assumées** : pas de notation rythmique (la largeur d'une colonne ne
+dépend pas de la durée) ; la durée d'un temps vient du *premier* tempo du
+`Song` (un changement de tempo ultérieur n'est pas répercuté sur l'espacement
+des silences) ; un silence qui chevauche une barre de mesure est dessiné avant
+cette barre ; les notes sans position ne sont pas affichées mais comptées et
+signalées.
