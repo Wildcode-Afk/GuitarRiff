@@ -1,6 +1,92 @@
 # GuitarRiff — État du projet
 
-## Étape 12 — Tablatures de basse (terminée le 08/10/2026)
+## Étape 13 — Accords et piste clavier (terminée le 12/11/2026)
+
+> Statut : **estimation d'accords depuis l'audio (base `librosa`, sans modèle entraîné), déduction depuis des notes, correction manuelle, et génération d'une piste clavier simple. Mesurée sur signaux synthétiques uniquement : la précision sur de vrais enregistrements est inconnue et sera nettement inférieure. Les accords ambigus ne sont jamais présentés comme certains.**
+
+Deux fonctionnalités **distinctes**, comme demandé : *obtenir* des accords (estimés, déduits de notes, ou fournis/corrigés par l'utilisateur), puis *générer* une représentation jouable (piste clavier) à partir d'eux.
+
+### Étude de bibliothèque (avant implémentation)
+
+La reconnaissance fiable d'accords demande normalement un modèle entraîné. Six options étudiées, **dépendances et licences lues sur PyPI** : `crema` (TensorFlow/Keras, dernière release avril 2022), `autochord` (TensorFlow + Vamp, octobre 2021), `chord-extractor` (**GPLv2**, Python < 3.12), `essentia` (**AGPL-3.0**), `madmom` (abandonné ; modèles **CC BY-NC-SA**), `madmom-infer` (maintenu, mais l'extraction d'accords est « hors périmètre pour l'instant »). **Aucune n'est acceptable : aucune bibliothèque de modèle n'est ajoutée** (docs/TECHNICAL_DECISIONS.md, D9). Une base `librosa` est construite à la place.
+
+`librosa`, `numpy` et `scipy` sont désormais déclarés **explicitement** dans `pyproject.toml` (ils n'étaient que transitifs via `basic-pitch` alors que le projet les importe directement). `librosa<1.0` : la 1.0 exige Python ≥ 3.12, incompatible avec notre 3.11 épinglé.
+
+### Ce qui a été ajouté
+
+| Élément | État |
+|---|---|
+| `model/chord.py` | `ChordEvent` (fondamentale, qualité, basse, début/durée, `position`, `confidence`, `source` detected/manual, `ambiguous`, `alternatives`) ; `symbol`, `inversion`, `pitch_classes` en champs **calculés** ; un accord `manual` ne peut porter ni confiance, ni ambiguïté, ni alternatives (validé par le modèle) |
+| `Song.chords` | Champ additif (vide par défaut : un `Song` ancien se charge — testé), validé trié et sans chevauchement ; `with_computed_positions` calcule aussi les positions des accords |
+| `harmony/templates.py` | Modèles d'accords (10 qualités), classement par similarité, `assess` : ambiguïté, alternatives, confiance |
+| `harmony/analyzer.py` | Estimation depuis l'audio : CQT, décomposition en notes (NNLS), segmentation, basse/renversement |
+| `harmony/from_notes.py` | Accords déduits de notes transcrites, basse et renversement **exacts**, confiance tenant compte de la couverture |
+| `harmony/keyboard.py` | Piste clavier à deux mains, conduite des voix, jouabilité garantie |
+| `harmony/service.py` + routes | `POST /estimate-chords`, `POST /chords-from-notes`, `PUT /chords`, `POST /generate-keyboard` ; `GET /song?with_positions=true` |
+| Refactor | `model/grouping.py` (regroupement des notes simultanées, extrait du mapper : un seul endroit définit « simultané ») ; `audio/sources.py` (résolution de la source, extraite de la transcription) |
+| Tests | **275 nouveaux tests** (modèle 41, classement 90, déduction depuis notes 25, clavier 14, analyseur 76, API 29) — backend à **710 tests par défaut**, plus **5 exclus par défaut** (3 d'intégration, 2 balayages exhaustifs `slow`) tous exécutés et verts |
+
+### Ce que la mesure a révélé — et corrigé
+
+Chaque défaut ci-dessous a été **trouvé en mesurant**, pas en relisant le code. Détails dans docs/ARCHITECTURE.md § 10.
+
+- **Simple chroma : 52/108 accords exacts** (triades majeures lues comme maj7, mineures oscillant avec le maj7 relatif). Décomposition en notes (NNLS) → **72/72** des accords sans équivalent.
+- **Résolution du CQT** : à 1 case par demi-ton, une note déborde de ~45 % sur ses voisines. Passage à 3 cases, avec un noyau d'étalement **mesuré** (`[0.01, 0.5, 1, 0.5, 0.01]`).
+- **Réponse en fréquence du CQT en f^(-1/2)** (×2.0 à do2, ×0.5 à do6) : dès qu'il y avait une vraie note de basse, **plus aucun accord** n'était trouvé. Gain mesuré `sqrt(f/f_ref)`.
+- **Garde-fou trop strict** (35 % du maximum) : ratait les accords à fondamentale doublée. Mesuré : une note seule laisse ≤ 5 % de parasites, les vraies notes d'accord descendent à ≈ 23 % → seuil 15 %.
+- **46 renversements faux sur 120** pour des accords joués sans aucune note grave (ex. un do en 2ᵉ renversement annoncé en position fondamentale), à cause d'activations parasites une octave sous les notes réelles. Seuil de basse relevé (0.10 → 0.50 ; artefacts 0.10-0.28, vraies basses 0.87-1.00) → **0 faux**. Contrepartie assumée : une basse très discrète n'est pas retenue (renversement inconnu plutôt que faux).
+- **Bonus de basse mal conçu** : il rétrécissait la marge des accords en position fondamentale (confiance 0.8 contre 1.0 en renversement) et créait des ambiguïtés artificielles. Il ne sert plus qu'à **ordonner** ; scores et marge restent bruts.
+- **Sur-confiance sur les notes** : un amas chromatique de 5 notes était lu « D#m7/C » à 0.82 sans ambiguïté. La **couverture** (part des notes jouées expliquées par l'accord) réduit maintenant la confiance et signale l'ambiguïté (0.66).
+- **Confiance nommée sur une propriété mathématique** : `FULL_CONFIDENCE_MARGIN = 0.13` n'est pas arbitraire — une triade parfaitement observée n'est battue que par l'accord de septième correspondant, à 1 − √(3/4) = 0.134 d'écart.
+- **Un test de régression par défaut corrigé** : j'avais écrit des attentes erronées (voir plus bas).
+
+### Résultats sur signaux synthétiques (le meilleur cas)
+
+| Accord joué | Résultat |
+|---|---|
+| maj, min, dim, 7 ; maj7, min7 | Exacts sur les 12 racines (balayage exhaustif : 72/72), non ambigus ; confiance 0.88-0.99 (triades), ≈ 0.8 (maj7/min7) |
+| aug, sus2, sus4 | **36/36 signalés ambigus** (notes identiques : `Csus2` = `Gsus4`, `Caug` = `Eaug` = `G#aug`) ; la lecture réellement jouée figure parmi les candidats |
+| Basse do2/mi2/sol2 | Position fondamentale, 1ᵉʳ, 2ᵉ renversement retrouvés |
+| C F G Am (2 s chacun) | 4 accords, frontières à ±0.1 s |
+| Silence, bruit blanc, note seule, dyade de tierce | Aucun accord |
+| Quinte | Toujours ambiguë, confiance plafonnée à 0.4 |
+| Bruit 20 dB / 10 dB | Bon accord, non ambigu |
+| Bruit 5 dB / 0 dB | Toute lecture fausse est signalée ambiguë ou de confiance < 0.5 |
+
+Temps de calcul mesuré : ~12 s de démarrage ponctuel par processus (JIT de `librosa`), puis ≈ 0.007 s par seconde d'audio (≈ 11 s pour 20 minutes ; délai par défaut 180 s).
+
+### Respect des consignes
+
+- **Ne présente pas les accords estimés comme certains lorsqu'ils sont ambigus** : `ambiguous` + `alternatives` + `confidence` sur chaque accord ; l'ambiguïté d'une équivalence de notes n'est pas masquée par la basse ; les réponses d'API rappellent la règle ; `include_ambiguous=false` permet d'écarter ces accords de la piste clavier.
+- **Durées et positions rythmiques** : `start_seconds`/`duration_seconds` + `position` (mesure/temps) calculée par la carte de tempo/métrique du `Song`.
+- **Renversements « lorsque les données permettent de les déterminer »** : exacts depuis des notes ; depuis l'audio seulement si la basse est nettement présente, sinon `null`.
+- **Piste clavier « à partir d'accords détectés ou corrigés »** : testé avec les deux ; les accords corrigés donnent des notes sans confiance, les accords estimés donnent des notes à la confiance de leur accord.
+- **Indication de confiance** : sur les accords et propagée aux notes du clavier.
+
+### Écarts honnêtes
+
+- **Tout a été mesuré sur des signaux que j'ai générés** (notes à harmoniques en 1/k, 2 s par accord, aucun instrument concurrent). **Aucune mesure sur de vrais enregistrements**, dont la précision sera très inférieure ; l'analyseur reste la partie la plus faible de l'application. Le dictionnaire de timbre (décroissance 0.7) a volontairement un autre profil que celui des signaux de test, mais cela ne remplace pas une vraie évaluation.
+- **Positions près des barres de mesure incertaines** : une frontière détectée porte ~93 ms d'incertitude (un accord qui débute sur la barre peut apparaître « mesure 1, temps 4.99 »), et la carte de tempo n'a pas de phase. Aucune quantification n'est appliquée : elle pourrait fausser les positions.
+- **Vocabulaire restreint** (10 qualités) ; dièses uniquement (A# et non Bb) ; une sixte majeure est lue comme la septième mineure du relatif (mêmes notes) ; aucune tonalité ni contexte harmonique.
+- **Seuil de basse fixe, calibré sur du synthétique** : dans un vrai mélange la basse peut être plus discrète que le reste (renversement alors non affirmé) ou les artefacts plus forts.
+- **La confiance est un indicateur heuristique, pas une probabilité calibrée.**
+- **Les accords déduits de notes héritent des erreurs de la transcription** (basic-pitch), notamment les notes manquées.
+- **La piste clavier est simple** : accord tenu toute sa durée, aucun rythme interne, vélocité fixe ; le biais vers le centre du clavier est un jugement heuristique non validé auprès de claviéristes. Ce n'est **pas** de la transcription de clavier (reste hors périmètre V1).
+- **Dette technique** : la création d'un `Song` à partir d'un fichier audio existe maintenant en trois variantes quasi identiques (transcription, rythme, harmonie). Non factorisée dans cette étape.
+- `estimate-chords` et `PUT /chords` **remplacent tous** les accords existants (pas de fusion) ; le mapping manche n'est toujours pas rejoué automatiquement après une nouvelle transcription.
+- **Mes tests contenaient des attentes fausses, pas le code** : paramètre dupliqué dans un helper, motif de regex erroné, arithmétique de position erronée (à 120 BPM, 1 s après le début de la mesure = temps 3, pas 2), seuils de confiance trop proches de la moyenne, « basse discrète » qui valait en fait 45 % des notes de l'accord. Corrigés après lecture du détail de chaque échec. Des **tests par mutation** (conduite des voix neutralisée ; couverture neutralisée) ont confirmé que les tests concernés échouent bien.
+
+### Résultats d'exécution réels
+
+```
+Backend : uv run pytest                      → 710 passed, 5 deselected
+Backend : uv run pytest -m "integration or slow" → 5 passed
+Backend : uv run ruff check .                → All checks passed!
+Backend : uv run mypy backend/guitarriff     → Success: no issues found in 63 source files
+Frontend : npm run test                      → 1 passed (inchangé)
+```
+
+## Historique — Étape 12 : tablatures de basse (terminée le 08/10/2026)
 
 > Statut : **mapping basse (4/5/6 cordes), notes répétées et silences gérés, rendu ASCII lisible. Mapper partagé avec la guitare (non copié) ; comportement guitare inchangé.**
 

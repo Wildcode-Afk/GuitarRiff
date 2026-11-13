@@ -40,6 +40,23 @@
   guitare/basse (décision Q3) plutôt que d'exposer un résultat de mauvaise
   qualité sur d'autres instruments.
 
+## Estimation d'accords — Étape 13 (aucun modèle)
+
+Contrairement à la transcription (basic-pitch) et à la séparation (Demucs),
+l'estimation d'accords **n'utilise aucun modèle entraîné** : aucune
+bibliothèque existante n'est acceptable (licences GPL/AGPL/non commerciale,
+projets abandonnés ou dépendances lourdes — voir `docs/TECHNICAL_DECISIONS.md`
+D9). C'est une base `librosa` (CQT, décomposition en notes, comparaison à des
+modèles d'accords) qui n'ajoute aucun poids à télécharger ni aucune licence à
+respecter.
+
+**Limites à communiquer** : calibrée et mesurée **uniquement sur des signaux
+synthétiques** ; la précision sur de vrais enregistrements (timbres riches,
+percussions, voix, réverbération, accords étendus) n'a pas été mesurée et est
+certainement très inférieure. Les accords ambigus sont toujours signalés
+(`ambiguous`, `alternatives`) ; une quinte seule, `sus2`/`sus4` et `aug` le sont
+par nature. Le vocabulaire (10 qualités) exclut les accords étendus.
+
 ---
 
 # Modèles de séparation d'instruments

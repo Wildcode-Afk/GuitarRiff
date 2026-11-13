@@ -1,6 +1,7 @@
-"""Analyse rythmique via `librosa` — seul module du projet qui l'importe
-directement (`librosa` est déjà une dépendance transitive de `basic-pitch`,
-voir docs/MODELS.md ; aucune nouvelle dépendance requise pour cette étape).
+"""Analyse rythmique via `librosa` — avec `harmony/analyzer.py` (Étape 13), l'un
+des deux seuls modules du projet qui l'importent directement. `librosa` était
+d'abord une dépendance transitive de `basic-pitch` (voir docs/MODELS.md) ; elle
+est désormais déclarée explicitement dans `pyproject.toml`.
 
 ## Étude des bibliothèques (avant implémentation, comme demandé)
 

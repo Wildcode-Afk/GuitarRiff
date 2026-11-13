@@ -46,6 +46,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from guitarriff.model import InstrumentSpecificInfo, NoteEvent, Track
+from guitarriff.model.grouping import group_note_indices
 from guitarriff.tablature.cost import (
     DEFAULT_WEIGHTS,
     CostWeights,
@@ -54,8 +55,6 @@ from guitarriff.tablature.cost import (
     string_center_after,
 )
 from guitarriff.tablature.fretboard import FretboardConfig, Position, candidate_positions
-
-CHORD_TOLERANCE_SECONDS = 0.05
 
 
 @dataclass(frozen=True)
@@ -77,36 +76,6 @@ class _Context:
 
     reference_fret: float | None = None
     string_center: float | None = None
-
-
-def _group_indices(notes: tuple[NoteEvent, ...]) -> tuple[tuple[int, ...], ...]:
-    """Regroupe les indices de notes dont les débuts sont à moins de
-    `CHORD_TOLERANCE_SECONDS` du début du groupe. Travailler sur des indices
-    (et non sur l'identité des objets) reste correct même si le même objet
-    `NoteEvent` apparaît plusieurs fois dans la piste (notes répétées)."""
-
-    if not notes:
-        return ()
-
-    ordered = sorted(range(len(notes)), key=lambda i: notes[i].start_seconds)
-    groups: list[list[int]] = [[ordered[0]]]
-    group_start = notes[ordered[0]].start_seconds
-
-    for index in ordered[1:]:
-        if notes[index].start_seconds - group_start <= CHORD_TOLERANCE_SECONDS:
-            groups[-1].append(index)
-        else:
-            groups.append([index])
-            group_start = notes[index].start_seconds
-
-    return tuple(tuple(g) for g in groups)
-
-
-def group_simultaneous_notes(notes: tuple[NoteEvent, ...]) -> tuple[tuple[NoteEvent, ...], ...]:
-    """Version publique du regroupement (utilisée aussi par le rendu de la
-    tablature, `render.py`), renvoyant des notes plutôt que des indices."""
-
-    return tuple(tuple(notes[i] for i in group) for group in _group_indices(notes))
 
 
 def _best_assignment(
@@ -167,7 +136,7 @@ def map_track_to_fretboard(
     des notes non placées."""
 
     notes = track.notes
-    groups = _group_indices(notes)
+    groups = group_note_indices(notes)
 
     placed: dict[int, NoteEvent] = {}  # indice d'origine -> note enrichie
     unplaced: list[UnplacedNote] = []

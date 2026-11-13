@@ -13,6 +13,13 @@ dependencies = [
     "python-multipart>=0.0.9,<1.0",
     "yt-dlp>=2025.1.1",
     "basic-pitch[tf]>=0.3,<1.0",
+    # Importés directement par le projet (analyse rythmique et harmonique,
+    # Étapes 10 et 13), ils n'étaient jusqu'ici que transitifs via basic-pitch.
+    # librosa 1.0 exige Python >= 3.12, incompatible avec notre version épinglée
+    # (3.11, voir docs/TECHNICAL_DECISIONS.md D1) : borne < 1.0.
+    "librosa>=0.10,<1.0",
+    "numpy>=1.23",
+    "scipy>=1.10",
     # Pin nécessaire : resampy (dépendance de basic-pitch) importe encore
     # pkg_resources, retiré des versions récentes de setuptools — vérifié
     # par une installation réelle dès l'Étape 1 (voir docs/TECHNICAL_DECISIONS.md, D2).

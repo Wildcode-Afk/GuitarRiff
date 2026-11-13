@@ -72,6 +72,44 @@ de ne pas déduire une métrique certaine d'une estimation incertaine. À
 revisiter si `madmom-infer` (ou un équivalent) gagne en maturité et qu'un
 besoin réel de détection de métrique se confirme.
 
+## D9 — Estimation d'accords : base `librosa` sans modèle entraîné (Étape 13)
+
+**Question posée :** la reconnaissance fiable d'accords nécessite-t-elle une
+bibliothèque supplémentaire ? Si oui, laquelle, et pourquoi ?
+
+**Options étudiées (métadonnées PyPI et dépendances lues, pas supposées) :**
+
+| Option | Constat vérifié | Verdict |
+|---|---|---|
+| `crema` | ISC ; dernière release avril 2022 ; exige `tensorflow`, `keras`, `pumpp`, `jams` | Écartée : ancienne, lourde |
+| `autochord` | MIT ; dernière release octobre 2021 ; exige `tensorflow` et `vamp` | Écartée : ancienne, greffon externe |
+| `chord-extractor` | **GPLv2** ; Python `<3.12` ; enveloppe le greffon Vamp Chordino compilé | Écartée : licence incompatible avec une distribution permissive |
+| `essentia` | **AGPL-3.0** ; bibliothèque lourde | Écartée : licence |
+| `madmom` | Dernière release 2018 ; licence « BSD, CC BY-NC-SA » (modèles **non commerciaux**) | Écartée : abandonnée, poids non commerciaux |
+| `madmom-infer` | BSD-2, maintenue (2026) ; l'extraction d'accords y est explicitement « hors périmètre pour l'instant » | Écartée : ne fait pas ce qu'on veut |
+
+**Décision :** aucune bibliothèque de modèle n'est ajoutée. Une **base de
+référence** est construite avec `librosa` : chroma obtenu par décomposition en
+notes (moindres carrés non négatifs, principe du chroma NNLS de Chordino) puis
+comparaison à des modèles d'accords. Elle est modeste, documentée comme telle,
+et signale ses doutes (ambiguïté, confiance, alternatives) au lieu de les
+cacher. La reconnaissance d'accords sur de vrais enregistrements reste le point
+le plus faible de l'application ; à revisiter si une option permissive,
+maintenue et sans dépendance lourde apparaît.
+
+**Dépendances directes déclarées :** `librosa>=0.10,<1.0`, `numpy>=1.23`,
+`scipy>=1.10`. Elles étaient jusqu'ici seulement transitives via `basic-pitch`
+alors que le projet les importe directement. La borne `<1.0` n'est pas
+cosmétique : `librosa` 1.0 exige Python ≥ 3.12, incompatible avec notre Python
+3.11 épinglé (D1).
+
+**Trois défauts de ma première version, trouvés en mesurant** (détails dans
+docs/ARCHITECTURE.md § 10) : un simple repliement du spectre lisait les triades
+majeures comme des accords de septième majeure (52 accords exacts sur 108) ;
+une résolution d'un demi-ton par case faisait déborder chaque note de ~45 % sur
+ses voisines ; et la réponse du CQT en f^(-1/2) faisait écraser tout l'accord
+par la moindre note de basse.
+
 ---
 
 ## Questions ouvertes (nécessitent ta décision avant l'implémentation)

@@ -6,7 +6,7 @@ parfait — voir `notes` dans `POST .../transcribe`.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from guitarriff.acquisition.storage import AudioFileStorage
@@ -45,7 +45,17 @@ def transcribe_audio(
 
 
 @router.get("/song", response_model=Song)
-def get_song(file_id: str, storage: AudioFileStorage = Depends(get_storage)) -> Song:  # noqa: B008
+def get_song(
+    file_id: str,
+    with_positions: bool = Query(
+        default=False,
+        description=(
+            "Calcule à la volée la position (mesure/temps) des notes et des accords. "
+            "Jamais persistée : elle dépend de la carte de tempo/métrique, qui peut changer."
+        ),
+    ),
+    storage: AudioFileStorage = Depends(get_storage),  # noqa: B008
+) -> Song:
     storage.get(file_id)  # valide l'existence du fichier (404 sinon)
     song = storage.read_song(file_id)
     if song is None:
@@ -53,4 +63,4 @@ def get_song(file_id: str, storage: AudioFileStorage = Depends(get_storage)) -> 
             "Aucune transcription n'a encore été calculée pour ce fichier.",
             details={"file_id": file_id},
         )
-    return song
+    return song.with_computed_positions() if with_positions else song

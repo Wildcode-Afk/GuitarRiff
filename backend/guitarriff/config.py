@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     # par défaut plus court.
     rhythm_analysis_timeout_seconds: int = Field(default=120, ge=1)
 
+    # Estimation d'accords (librosa, Étape 13) : CQT + décomposition en notes sur
+    # toute la durée, plus coûteux que l'analyse rythmique.
+    chord_analysis_timeout_seconds: int = Field(default=180, ge=1)
+
     @field_validator("data_dir")
     @classmethod
     def _resolve_data_dir(cls, value: Path) -> Path:

@@ -31,6 +31,23 @@ class EstimationSource(StrEnum):
     MANUAL = "manual"
 
 
+class ChordQuality(StrEnum):
+    """Vocabulaire volontairement restreint d'accords (Étape 13). Un
+    vocabulaire plus riche (neuvièmes, accords altérés, etc.) multiplierait les
+    ambiguïtés d'une estimation à partir de l'audio sans gain démontrable."""
+
+    MAJOR = "maj"
+    MINOR = "min"
+    DIMINISHED = "dim"
+    AUGMENTED = "aug"
+    SUS2 = "sus2"
+    SUS4 = "sus4"
+    DOMINANT_7 = "7"
+    MAJOR_7 = "maj7"
+    MINOR_7 = "min7"
+    POWER = "5"
+
+
 class Clef(StrEnum):
     TREBLE = "treble"
     BASS = "bass"

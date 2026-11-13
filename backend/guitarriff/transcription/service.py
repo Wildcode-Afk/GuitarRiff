@@ -10,15 +10,13 @@ laissé à la seule documentation.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from guitarriff.acquisition.storage import AudioFileStorage
 from guitarriff.audio.ffmpeg import probe_audio
+from guitarriff.audio.sources import resolve_source_path
 from guitarriff.config import Settings
 from guitarriff.errors import (
-    AudioNotNormalizedError,
     InvalidInstrumentForTranscriptionError,
-    SeparatedStemNotFoundError,
 )
 from guitarriff.model import AudioMetadata, Clef, InstrumentKind, Song, Track, TrackDisplaySettings
 from guitarriff.transcription.basic_pitch_adapter import run_basic_pitch
@@ -28,11 +26,6 @@ from guitarriff.transcription.converter import raw_notes_to_note_events
 _SUPPORTED_INSTRUMENTS = (InstrumentKind.GUITAR, InstrumentKind.BASS)
 
 _TRACK_NAMES = {InstrumentKind.GUITAR: "Guitare", InstrumentKind.BASS: "Basse"}
-
-# Ordre de recherche des modes de séparation en cache pour une piste donnée
-# (voir separation/models.py) — htdemucs_6s d'abord, seul mode à isoler une
-# piste "guitar" dédiée.
-_SEPARATION_MODES_SEARCH_ORDER = ("htdemucs_6s", "htdemucs")
 
 
 @dataclass(frozen=True)
@@ -59,7 +52,7 @@ def transcribe(
         )
 
     record = storage.get(file_id)
-    source_path = _resolve_source_path(file_id, source, storage)
+    source_path = resolve_source_path(file_id, source, storage)
 
     probe = probe_audio(source_path, timeout_seconds=settings.ffmpeg_timeout_seconds)
 
@@ -96,29 +89,6 @@ def transcribe(
 
     return TranscriptionResult(
         song=song, track_id=track.id, notes=_build_disclaimer(instrument, source)
-    )
-
-
-def _resolve_source_path(file_id: str, source: str, storage: AudioFileStorage) -> Path:
-    if source == "mixture":
-        record = storage.get(file_id)
-        normalized_path = storage.normalized_path(file_id)
-        if not record.normalized or not normalized_path.is_file():
-            raise AudioNotNormalizedError(
-                "Ce fichier doit d'abord être normalisé (POST .../normalize) "
-                "avant une transcription sur le mélange complet.",
-                details={"file_id": file_id},
-            )
-        return normalized_path
-
-    for mode in _SEPARATION_MODES_SEARCH_ORDER:
-        candidate = storage.separated_dir(file_id, mode) / f"{source}.wav"
-        if candidate.is_file():
-            return candidate
-
-    raise SeparatedStemNotFoundError(
-        "Cette piste séparée n'a pas encore été calculée (POST .../separate d'abord).",
-        details={"file_id": file_id, "requested_stem": source},
     )
 
 

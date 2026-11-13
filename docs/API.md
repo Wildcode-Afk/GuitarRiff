@@ -618,6 +618,125 @@ Erreurs : `400` (`invalid_instrument_for_fretboard_mapping`), `404`
 (`fretboard_not_mapped`), `422` (`validation_error` — ex. `max_width` hors
 bornes, `instrument` manquant).
 
+### Accords et piste clavier (Étape 13)
+
+Deux fonctionnalités **distinctes** : *obtenir* des accords, puis *générer* une
+piste clavier à partir d'eux. Les accords vivent dans `Song.chords` (voir
+`docs/ARCHITECTURE.md` § 10) ; chaque accord porte `symbol`, `inversion`,
+`pitch_classes`, `source` (`detected` / `manual`), `confidence`, `ambiguous`,
+`alternatives` et, dans les réponses, `position` (mesure/temps, calculée à la
+volée — jamais persistée).
+
+**Règle d'or : un accord marqué `ambiguous: true` ne doit jamais être présenté
+comme certain.** Consultez ses `alternatives`.
+
+#### `POST /audio-files/{file_id}/estimate-chords`
+
+Estime les accords à partir de l'audio. Corps : `{"source": "mixture"}`
+(défaut) ou le nom d'une piste séparée déjà calculée (`"other"`, `"guitar"`…).
+Remplace tous les accords existants.
+
+```json
+{
+  "song": { "...": "Song mis à jour" },
+  "chords": [
+    {
+      "symbol": "C/E", "root_pitch_class": 0, "quality": "maj",
+      "bass_pitch_class": 4, "inversion": 1, "pitch_classes": [0, 4, 7],
+      "start_seconds": 0.0, "duration_seconds": 2.0,
+      "position": { "bar": 1, "beat": 1.0 },
+      "confidence": 0.81, "source": "detected",
+      "ambiguous": false, "alternatives": []
+    }
+  ],
+  "ambiguous_count": 0,
+  "notes": "Estimation heuristique [...] mesurée uniquement sur des signaux synthétiques [...]"
+}
+```
+
+- **Base de référence, pas un modèle entraîné** (aucune bibliothèque de
+  reconnaissance d'accords n'est acceptable : voir `docs/TECHNICAL_DECISIONS.md`
+  D9). Calibrée et mesurée **uniquement sur des signaux synthétiques** : sa
+  précision sur de vrais enregistrements n'est pas connue et sera nettement
+  inférieure.
+- **Jamais d'accord inventé** : silence, note seule, intervalle sans quinte,
+  bruit → aucun accord (trou dans la liste). Un résultat vide est un `200`.
+- **Ambiguïtés inévitables** : `Csus2` et `Gsus4` (mêmes notes), `Caug`/`Eaug`/
+  `G#aug` sont toujours signalés ambigus ; une quinte seule (« power chord »)
+  aussi, avec une confiance plafonnée à 0.4.
+- **Renversement** : `inversion` n'est renseigné que si la basse est détectée
+  avec assez de fermeté ; sinon `null` (on préfère l'inconnu à un renversement
+  faux). Une basse très discrète n'est pas retenue.
+- **Positions** : une frontière détectée porte l'incertitude d'une trame
+  d'analyse (~93 ms) : un accord qui débute sur la barre peut apparaître
+  « mesure 1, temps 4.99 ». Aucune quantification n'est appliquée.
+- Le mélange doit être normalisé (`409 audio_not_normalized` sinon) ; une piste
+  séparée absente donne `404 separated_stem_not_found`.
+
+Erreurs : `409` (`audio_not_normalized`), `404` (`separated_stem_not_found`,
+`not_found`), `504` (`chord_analysis_timeout`), `500` (`chord_analysis_failed`).
+
+#### `POST /audio-files/{file_id}/chords-from-notes`
+
+Déduit les accords des **notes déjà transcrites** d'un instrument
+(`{"instrument": "guitar"}`). Ici la basse exacte — la plus basse note — est
+connue : le renversement est déterminé avec certitude, y compris une basse hors
+accord (`C/D`, `inversion: null`). La confiance tient compte de celle des notes
+et de la **couverture** : un accord qui n'explique pas toutes les notes jouées
+est signalé ambigu. Erreurs : `400` (`invalid_chord_source` — batterie), `404`
+(aucune transcription ou aucune piste de cet instrument).
+
+#### `PUT /audio-files/{file_id}/chords`
+
+Définit ou corrige les accords **manuellement**. Remplace **tous** les accords.
+
+```json
+{ "chords": [
+  { "root_pitch_class": 2, "quality": "min", "start_seconds": 0.0, "duration_seconds": 2.0 },
+  { "root_pitch_class": 7, "quality": "7", "bass_pitch_class": 11,
+    "start_seconds": 2.0, "duration_seconds": 2.0 }
+] }
+```
+
+Qualités : `maj`, `min`, `dim`, `aug`, `sus2`, `sus4`, `7`, `maj7`, `min7`, `5`.
+Un accord manuel est `source: "manual"`, **certain par définition** (`confidence:
+null`, `ambiguous: false`). Triés par début, sans chevauchement (`422
+validation_error` sinon). Liste vide = efface les accords. Fonctionne sans
+analyse préalable.
+
+#### `POST /audio-files/{file_id}/generate-keyboard`
+
+Génère une **piste clavier simple** à partir des accords (détectés, déduits ou
+corrigés). Corps : `{"include_ambiguous": true}` (si faux, les accords ambigus
+sont écartés et comptés).
+
+Ajoute (ou remplace) deux pistes `PIANO` : `piano-rh` (main droite, clé de
+sol) et `piano-lh` (main gauche, clé de fa) ; les autres pistes sont conservées.
+
+```json
+{
+  "song": { "...": "avec les pistes piano-rh et piano-lh" },
+  "chord_count": 4, "skipped_ambiguous_count": 0,
+  "low_confidence_chord_count": 0,
+  "right_hand_note_count": 12, "left_hand_note_count": 4,
+  "notes": "Piste clavier simple [...] pas une transcription de ce qui est joué [...]"
+}
+```
+
+- **Jouable** : main gauche = une note de basse (la basse connue de l'accord si
+  elle existe) ; main droite = l'accord en position rapprochée, au plus 4
+  notes, écart ≤ une octave, renversement choisi pour **déplacer le moins
+  possible la main** par rapport à l'accord précédent.
+- **Ce n'est pas une transcription** : chaque accord est tenu toute sa durée
+  (pas de rythme interne), vélocité fixe. Les notes héritent de la **confiance**
+  de leur accord (`NoteEvent.confidence`).
+- Erreur : `409 no_chords` si aucun accord n'est disponible.
+
+#### `GET /audio-files/{file_id}/song?with_positions=true`
+
+Option ajoutée à la lecture du `Song` : calcule à la volée la position
+(mesure/temps) des notes **et des accords**. Jamais persistée.
+
 ## Format des erreurs
 
 Toutes les erreurs (validation, route inconnue, méthode non autorisée,

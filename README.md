@@ -110,6 +110,20 @@ curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/map-fretboard \
 curl "http://127.0.0.1:8000/audio-files/<file_id>/tablature?instrument=bass"
 ```
 
+Estimer les accords à partir de l'audio (base `librosa`, mesurée seulement sur
+des signaux synthétiques — les accords `ambiguous` ne sont jamais certains),
+les corriger, puis générer une piste clavier simple :
+
+```bash
+curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/estimate-chords \
+  -H "Content-Type: application/json" -d '{}'
+curl -X PUT http://127.0.0.1:8000/audio-files/<file_id>/chords \
+  -H "Content-Type: application/json" \
+  -d '{"chords": [{"root_pitch_class": 0, "quality": "maj", "start_seconds": 0, "duration_seconds": 2}]}'
+curl -X POST http://127.0.0.1:8000/audio-files/<file_id>/generate-keyboard \
+  -H "Content-Type: application/json" -d '{}'
+```
+
 Voir `docs/API.md` pour le détail des routes et des erreurs, et
 `docs/MODELS.md` pour les modèles disponibles et leurs limites.
 

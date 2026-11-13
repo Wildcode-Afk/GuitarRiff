@@ -14,6 +14,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from guitarriff.model.chord import ChordEvent, validate_chords_non_overlapping
 from guitarriff.model.position import compute_position
 from guitarriff.model.tempo import TempoChange, TimeSignatureChange
 from guitarriff.model.track import Track
@@ -55,6 +56,9 @@ class Song(BaseModel):
         default_factory=_default_time_signature_changes
     )
     tracks: tuple[Track, ...] = ()
+    # Accords estimés ou corrigés (Étape 13) ; vide par défaut, donc un Song
+    # persisté avant cette étape se charge toujours.
+    chords: tuple[ChordEvent, ...] = ()
     created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     @field_validator("tempo_changes")
@@ -69,6 +73,11 @@ class Song(BaseModel):
     ) -> tuple[TimeSignatureChange, ...]:
         return _validate_changes_start_at_zero_and_sorted(value, "time_signature_changes")
 
+    @field_validator("chords")
+    @classmethod
+    def _validate_chords(cls, value: tuple[ChordEvent, ...]) -> tuple[ChordEvent, ...]:
+        return validate_chords_non_overlapping(value)
+
     @model_validator(mode="after")
     def _validate_track_ids_unique(self) -> Song:
         ids = [track.id for track in self.tracks]
@@ -80,7 +89,7 @@ class Song(BaseModel):
 
     def with_computed_positions(self) -> Song:
         """Renvoie une copie de ce `Song` où chaque `NoteEvent`/`RhythmEvent`
-        de chaque piste a sa `position` calculée à partir de
+        de chaque piste, ainsi que chaque `ChordEvent`, a sa `position` calculée à partir de
         `tempo_changes`/`time_signature_changes`.
 
         Fonction pure : ne modifie jamais `self` (modèle immuable) — utile
@@ -109,7 +118,15 @@ class Song(BaseModel):
             new_tracks.append(
                 track.model_copy(update={"notes": new_notes, "rhythm_events": new_rhythm_events})
             )
-        return self.model_copy(update={"tracks": tuple(new_tracks)})
+        new_chords = tuple(
+            chord.with_position(
+                compute_position(
+                    chord.start_seconds, self.tempo_changes, self.time_signature_changes
+                )
+            )
+            for chord in self.chords
+        )
+        return self.model_copy(update={"tracks": tuple(new_tracks), "chords": new_chords})
 
 
 def _validate_changes_start_at_zero_and_sorted(

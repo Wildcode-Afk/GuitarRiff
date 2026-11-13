@@ -239,6 +239,36 @@ class FretboardNotMappedError(AppError):
     error_code = "fretboard_not_mapped"
 
 
+class ChordAnalysisError(AppError):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    error_code = "chord_analysis_failed"
+
+
+class ChordAnalysisTimeoutError(AppError):
+    status_code = status.HTTP_504_GATEWAY_TIMEOUT
+    error_code = "chord_analysis_timeout"
+
+
+class NoChordsError(AppError):
+    """Génération demandée alors qu'aucun accord n'a été estimé ni défini
+    (`POST .../estimate-chords`, `.../chords-from-notes` ou `PUT .../chords`)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "no_chords"
+
+
+class InvalidChordSourceError(AppError):
+    """Instrument sans hauteurs (batterie) : aucun accord n'en est déductible."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "invalid_chord_source"
+
+
+class InvalidChordsError(AppError):
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    error_code = "invalid_chords"
+
+
 class InvalidFileIdError(AppError):
     """Identifiant de fichier syntaxiquement invalide (pas un UUID).
 

@@ -1,6 +1,6 @@
 """Point d'entrée de l'API FastAPI.
 
-À ce stade (Étape 11), l'application expose : la vérification de démarrage
+À ce stade (Étape 13), l'application expose : la vérification de démarrage
 (`/health`), la version (`/version`), l'import/consultation/suppression/
 normalisation de fichiers audio locaux (`/audio-files`), l'import audio
 depuis YouTube (`/youtube-imports`), la séparation d'instruments optionnelle
@@ -8,7 +8,9 @@ depuis YouTube (`/youtube-imports`), la séparation d'instruments optionnelle
 (`/audio-files/{id}/transcribe`, `/audio-files/{id}/song`), l'analyse
 rythmique et les corrections manuelles (`/audio-files/{id}/analyze-rhythm`,
 `/tempo`, `/time-signature`), le mapping manche
-(`/audio-files/{id}/map-fretboard`), une gestion d'erreurs cohérente et la
+(`/audio-files/{id}/map-fretboard`, `/tablature`), l'analyse harmonique
+(`/audio-files/{id}/estimate-chords`, `/chords-from-notes`, `/chords`,
+`/generate-keyboard`), une gestion d'erreurs cohérente et la
 configuration CORS pour le frontend.
 """
 
@@ -21,6 +23,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from guitarriff.api.routes.audio_files import router as audio_files_router
+from guitarriff.api.routes.harmony import router as harmony_router
 from guitarriff.api.routes.health import router as health_router
 from guitarriff.api.routes.rhythm import router as rhythm_router
 from guitarriff.api.routes.separation import router as separation_router
@@ -35,7 +38,7 @@ from guitarriff.logging_config import configure_logging, get_logger
 logger = get_logger(__name__)
 
 API_DESCRIPTION = """
-API de GuitarRiff — socle serveur (Étape 11).
+API de GuitarRiff — socle serveur (Étape 13).
 
 Voir `docs/API.md` pour le détail des routes disponibles, le format des
 erreurs, et les limites connues de la transcription (basic-pitch).
@@ -86,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(transcription_router)
     app.include_router(rhythm_router)
     app.include_router(tablature_router)
+    app.include_router(harmony_router)
 
     return app
 

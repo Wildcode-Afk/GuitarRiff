@@ -138,8 +138,8 @@ sérialisation JSON obtenues nativement, sans code manuel.
 
 ## 7. Analyse rythmique et distinction détecté/manuel — Étape 10
 
-`backend/guitarriff/rhythm/` : `analyzer.py` (seul point d'import de
-`librosa`) détecte tempo, battements et changements de tempo avec une mesure
+`backend/guitarriff/rhythm/` : `analyzer.py` (avec `harmony/analyzer.py`, l'un
+des deux modules qui importent `librosa` directement) détecte tempo, battements et changements de tempo avec une mesure
 de confiance réelle ; `service.py` orchestre la mise à jour du `Song` déjà
 persisté par la transcription (Étape 9) ou en crée un si nécessaire.
 
@@ -288,3 +288,109 @@ dépend pas de la durée) ; la durée d'un temps vient du *premier* tempo du
 des silences) ; un silence qui chevauche une barre de mesure est dessiné avant
 cette barre ; les notes sans position ne sont pas affichées mais comptées et
 signalées.
+
+## 10. Accords et piste clavier — Étape 13
+
+Deux fonctionnalités **distinctes** (`backend/guitarriff/harmony/`) :
+1. **obtenir des accords** — estimés depuis l'audio, déduits de notes
+   transcrites, ou fournis/corrigés par l'utilisateur ;
+2. **générer une représentation jouable** (piste clavier) à partir de ces
+   accords, quelle qu'en soit l'origine.
+
+### Représentation normalisée (`model/chord.py`)
+
+`Song.chords : tuple[ChordEvent, ...]` (vide par défaut : un `Song` persisté
+avant cette étape se charge toujours). Un `ChordEvent` porte : classe de
+hauteur de la fondamentale (0-11) et de la basse, `quality` (10 qualités :
+maj, min, dim, aug, sus2, sus4, 7, maj7, min7, quinte), `start_seconds` et
+`duration_seconds` (même axe que `NoteEvent`), `position` (mesure/temps,
+**dérivée**), `confidence`, `source` (`detected` / `manual`, comme pour le tempo
+de l'Étape 10), `ambiguous` et `alternatives`. `symbol`, `inversion` et
+`pitch_classes` sont des champs **calculés** (présents dans le JSON, jamais
+stockés).
+
+- **Absence d'accord** = trou dans la liste (silence, contenu non harmonique) ;
+  les accords ne se chevauchent jamais (validé par `Song`).
+- **Renversement** : défini seulement si la basse est connue *et* appartient à
+  l'accord ; une basse hors accord (do/ré) donne `inversion = None`.
+- **Un accord `manual` est certain par définition** : ni confiance, ni
+  ambiguïté, ni alternatives — validé par le modèle lui-même.
+- **Positions** : calculées à la volée (`Song.with_computed_positions`,
+  `GET /song?with_positions=true`), jamais persistées — elles deviendraient
+  fausses si la carte de tempo changeait. Elles héritent de ses limites : la
+  carte de tempo n'a pas de phase, et une frontière d'accord détectée porte
+  l'incertitude d'une trame d'analyse (~93 ms), si bien qu'un accord qui débute
+  sur la barre peut tomber juste avant (« mesure 1, temps 4.99 »). Aucune
+  quantification n'est appliquée : elle pourrait fausser les positions.
+
+### Estimation depuis l'audio (`harmony/analyzer.py`)
+
+Pas de modèle entraîné (voir D9). Chaîne : CQT à 3 cases par demi-ton →
+compensation de la réponse en fréquence → décomposition en notes (NNLS) →
+étiquettes de trames lissées, segmentation → reclassement de chaque segment sur
+son chroma moyen. Détails et seuils dans le docstring du module.
+
+**Ce que la mesure a révélé — et corrigé** (signaux synthétiques à harmoniques
+en 1/k, 2 s par accord ; chaque défaut a été trouvé en mesurant, pas en
+relisant) :
+
+| Constat mesuré | Correction |
+|---|---|
+| Simple repliement du spectre : **52/108** accords exacts ; les triades majeures lues comme maj7 (la 3ᵉ harmonique de la tierce pollue le chroma), les mineures oscillant avec le maj7 relatif | Décomposition en notes (NNLS) : **72/72** des accords sans équivalent |
+| À 1 case par demi-ton, une note déborde de ~45 % sur les demi-tons voisins (activations parasites) | 3 cases par demi-ton ; noyau d'étalement **mesuré** `[0.01, 0.5, 1, 0.5, 0.01]` |
+| Le module du CQT décroît en f^(-1/2) (×2.0 à do2, ×0.5 à do6) : avec une vraie note de basse, **plus aucun accord** n'était trouvé | Gain `sqrt(f / f_ref)` |
+| Garde-fou « ≥ 3 classes à 35 % du maximum » : ratait les accords à fondamentale doublée (la quinte tombe à ≈ 23 %) | Seuil 15 % (une note seule laisse ≤ 5 % de parasites) |
+| Seuil de basse à 10 % : **46 renversements faux sur 120** pour des accords joués sans aucune note grave (ex. un do en 2ᵉ renversement annoncé en position fondamentale) | Seuil 50 % (artefacts : 0.10-0.28 du pic ; vraies basses : 0.87-1.00) → 0 faux ; en contrepartie, une basse très discrète n'est pas retenue |
+| Bonus de basse ajouté aux concurrents de même fondamentale : la confiance d'un accord en position fondamentale tombait à 0.8 (1.0 en renversement), et des ambiguïtés artificielles apparaissaient | Le bonus ne sert plus qu'à **ordonner** ; scores et marge restent bruts |
+
+**Résultats sur signaux synthétiques** (le meilleur cas, pas la performance
+réelle) :
+
+| Accord joué | Résultat |
+|---|---|
+| maj, min, dim, 7 (12 racines × 4) | 12/12 exacts, non ambigus |
+| maj7, min7 | 12/12 exacts, non ambigus (confiance ≈ 0.8) |
+| aug, sus2, sus4 | Toujours **signalés ambigus** (notes identiques : `Csus2` = `Gsus4`, `Caug` = `Eaug` = `G#aug`) ; l'accord réellement joué figure parmi les candidats |
+| Basse en do2, mi2, sol2 | Position fondamentale, 1ᵉʳ et 2ᵉ renversement retrouvés |
+| Enchaînement C F G Am (2 s chacun) | 4 accords, frontières à ±0.1 s |
+| Silence, bruit blanc, note seule, dyade de tierce | Aucun accord |
+| Quinte do+sol | Quinte, **toujours ambiguë** (confiance plafonnée à 0.4) |
+| Do majeur + bruit à 20 dB / 10 dB | Bon accord, non ambigu |
+| Do majeur + bruit à 5 dB / 0 dB | Toute lecture fausse est signalée ambiguë ou de confiance < 0.5 |
+
+**Temps de calcul** (mesuré) : ~12 s de démarrage ponctuel par processus
+(compilation JIT de `librosa` au premier appel), puis ≈ 0.007 s par seconde
+d'audio (≈ 11 s pour 20 minutes). Le délai par défaut est de 180 s.
+
+**Ambiguïtés musicalement légitimes, pas des artefacts** : un `dim` est inclus
+dans un `7` sans fondamentale (`Cdim` ⊂ `G#7`) ; un `maj7`/`min7` dont la
+septième est discrète ressemble à la triade ; et la septième mineure d'une
+tonalité a les notes de la sixte majeure du relatif (`Am7` = `C6`), que le
+vocabulaire ne contient pas : une sixte est donc lue comme une septième mineure.
+
+### Accords déduits de notes (`harmony/from_notes.py`)
+
+Notes simultanées regroupées comme pour les tablatures (`model/grouping.py`,
+extrait du mapper : un seul endroit définit « simultané »). Ici les hauteurs
+sont connues : la **basse exacte** — la plus basse note — donne le renversement
+avec certitude, y compris une basse hors accord. La confiance est multipliée par
+la **couverture** (part des classes jouées appartenant à l'accord) : un amas
+chromatique `[do, do#, ré#, fa#, la#]` était d'abord lu « D#m7/C » avec 0.82 et
+sans ambiguïté ; il est maintenant signalé ambigu (0.66).
+
+### Piste clavier (`harmony/keyboard.py`)
+
+Deux pistes `PIANO` (`piano-rh` clé de sol, `piano-lh` clé de fa). Main gauche :
+une note de basse (la basse connue de l'accord si elle existe). Main droite :
+l'accord en position rapprochée, **renversement et octave choisis pour déplacer
+le moins possible la main** (conduite des voix). Invariants garantis et testés :
+une main, au plus 4 notes, écart ≤ 12 demi-tons, accord complet, aucun
+chevauchement. Mesuré sur 300 progressions aléatoires de 8 accords (graine fixe) : 13 859
+demi-tons de déplacement cumulé contre 32 161 avec un voicing fixe (ratio 0.43),
+et jamais pire sur une progression donnée.
+
+**Ce n'est pas une transcription** : chaque accord est tenu toute sa durée (pas
+de rythme interne), vélocité fixe, et les notes héritent de la confiance de leur
+accord. `include_ambiguous=false` permet d'écarter les accords ambigus.
+Le biais vers le centre du clavier est un jugement heuristique, non validé
+auprès de claviéristes.

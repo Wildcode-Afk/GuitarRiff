@@ -11,12 +11,14 @@ est le seul contrat exposé.
 - `note_event.py` : `NoteEvent`, `InstrumentSpecificInfo`.
 - `rhythm_event.py` : `RhythmEvent` (batterie et événements non-harmoniques).
 - `track.py` : `Track`, `TrackDisplaySettings`.
+- `chord.py` : `ChordEvent`, `ChordCandidate` — accords (Étape 13).
 - `song.py` : `Song`, `AudioMetadata` — racine du modèle.
 """
 
 from __future__ import annotations
 
-from guitarriff.model.enums import Clef, DrumPiece, EstimationSource, InstrumentKind
+from guitarriff.model.chord import ChordCandidate, ChordEvent
+from guitarriff.model.enums import ChordQuality, Clef, DrumPiece, EstimationSource, InstrumentKind
 from guitarriff.model.note_event import InstrumentSpecificInfo, NoteEvent
 from guitarriff.model.position import MusicalPosition, compute_position
 from guitarriff.model.rhythm_event import RhythmEvent
@@ -26,6 +28,9 @@ from guitarriff.model.track import Track, TrackDisplaySettings
 
 __all__ = [
     "AudioMetadata",
+    "ChordCandidate",
+    "ChordEvent",
+    "ChordQuality",
     "Clef",
     "DrumPiece",
     "EstimationSource",

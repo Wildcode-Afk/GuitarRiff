@@ -32,7 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from guitarriff.model import Track
-from guitarriff.tablature.mapper import group_simultaneous_notes
+from guitarriff.model.grouping import group_simultaneous_notes
 
 MAX_REST_COLUMNS = 6
 DEFAULT_MAX_WIDTH = 80
